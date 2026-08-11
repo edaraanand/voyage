@@ -1,7 +1,18 @@
 # queries/poc_queries.py
 
 QUERY1 = """
-SELECT *, 1 AS match_criteria
+SELECT given_name,
+surname,
+date_of_birth,
+maritime_account_id,
+email_contact,
+contact_number,
+most_recent_sailing_date_1,
+port_city,
+address_line_1,
+zip_code,
+address_line_2,
+membership_start_date_1, 1 AS match_criteria
 FROM customer_voyage_profile
 WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
   AND lower(given_name) = lower(%(given_name)s)
@@ -12,7 +23,18 @@ LIMIT 1
 
 
 QUERY2 = """
-SELECT *, 2 AS match_criteria
+SELECT given_name,
+surname,
+date_of_birth,
+maritime_account_id,
+email_contact,
+contact_number,
+most_recent_sailing_date_1,
+port_city,
+address_line_1,
+zip_code,
+address_line_2,
+membership_start_date_1, 2 AS match_criteria
 FROM customer_voyage_profile
 WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
   AND lower(given_name) = lower(%(given_name)s)
@@ -24,7 +46,18 @@ LIMIT 1
 
 
 QUERY3 = """
-SELECT *, 3 AS match_criteria
+SELECT given_name,
+surname,
+date_of_birth,
+maritime_account_id,
+email_contact,
+contact_number,
+most_recent_sailing_date_1,
+port_city,
+address_line_1,
+zip_code,
+address_line_2,
+membership_start_date_1,  3 AS match_criteria
 FROM customer_voyage_profile
 WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
   AND lower(given_name) = lower(%(given_name)s)
@@ -36,7 +69,18 @@ LIMIT 1
 
 
 QUERY4 = """
-SELECT *, 4 AS match_criteria
+SELECT given_name,
+surname,
+date_of_birth,
+maritime_account_id,
+email_contact,
+contact_number,
+most_recent_sailing_date_1,
+port_city,
+address_line_1,
+zip_code,
+address_line_2,
+membership_start_date_1, 4 AS match_criteria
 FROM customer_voyage_profile
 WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
   AND lower(given_name) = lower(%(given_name)s)
@@ -52,7 +96,18 @@ LIMIT 1
 
 
 QUERY5 = """
-SELECT *, 5 AS match_criteria
+SELECT given_name,
+surname,
+date_of_birth,
+maritime_account_id,
+email_contact,
+contact_number,
+most_recent_sailing_date_1,
+port_city,
+address_line_1,
+zip_code,
+address_line_2,
+membership_start_date_1, 5 AS match_criteria
 FROM customer_voyage_profile
 WHERE lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
@@ -67,7 +122,18 @@ LIMIT 1
 
 
 QUERY6 = """
-SELECT *, 6 AS match_criteria
+SELECT given_name,
+surname,
+date_of_birth,
+maritime_account_id,
+email_contact,
+contact_number,
+most_recent_sailing_date_1,
+port_city,
+address_line_1,
+zip_code,
+address_line_2,
+membership_start_date_1, 6 AS match_criteria
 FROM customer_voyage_profile
 WHERE lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
@@ -83,7 +149,18 @@ LIMIT 1
 
 
 QUERY7 = """
-SELECT *, 7 AS match_criteria
+SELECT given_name,
+surname,
+date_of_birth,
+maritime_account_id,
+email_contact,
+contact_number,
+most_recent_sailing_date_1,
+port_city,
+address_line_1,
+zip_code,
+address_line_2,
+membership_start_date_1, 7 AS match_criteria
 FROM customer_voyage_profile
 WHERE lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
@@ -98,7 +175,18 @@ LIMIT 1
 
 
 QUERY8 = """
-SELECT *, 8 AS match_criteria
+SELECT given_name,
+surname,
+date_of_birth,
+maritime_account_id,
+email_contact,
+contact_number,
+most_recent_sailing_date_1,
+port_city,
+address_line_1,
+zip_code,
+address_line_2,
+membership_start_date_1, 8 AS match_criteria
 FROM customer_voyage_profile
 WHERE lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
@@ -114,7 +202,18 @@ LIMIT 1
 
 
 QUERY9 = """
-SELECT *, 9 AS match_criteria
+SELECT given_name,
+surname,
+date_of_birth,
+maritime_account_id,
+email_contact,
+contact_number,
+most_recent_sailing_date_1,
+port_city,
+address_line_1,
+zip_code,
+address_line_2,
+membership_start_date_1, 9 AS match_criteria
 FROM customer_voyage_profile
 WHERE lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
@@ -133,7 +232,18 @@ LIMIT 1
 
 
 QUERY10 = """
-SELECT *, 10 AS match_criteria
+SELECT given_name,
+surname,
+date_of_birth,
+maritime_account_id,
+email_contact,
+contact_number,
+most_recent_sailing_date_1,
+port_city,
+address_line_1,
+zip_code,
+address_line_2,
+membership_start_date_1, 10 AS match_criteria
 FROM customer_voyage_profile
 WHERE lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
@@ -153,7 +263,18 @@ LIMIT 1
 
 
 QUERY11 = """
-SELECT *, 11 AS match_criteria
+SELECT given_name,
+surname,
+date_of_birth,
+maritime_account_id,
+email_contact,
+contact_number,
+most_recent_sailing_date_1,
+port_city,
+address_line_1,
+zip_code,
+address_line_2,
+membership_start_date_1, 11 AS match_criteria
 FROM customer_voyage_profile
 WHERE lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
@@ -165,7 +286,18 @@ LIMIT 1
 
 
 QUERY12 = """
-SELECT *, 12 AS match_criteria
+SELECT given_name,
+surname,
+date_of_birth,
+maritime_account_id,
+email_contact,
+contact_number,
+most_recent_sailing_date_1,
+port_city,
+address_line_1,
+zip_code,
+address_line_2,
+membership_start_date_1, 12 AS match_criteria
 FROM customer_voyage_profile
 WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
   AND lower(given_name) = lower(%(given_name)s)

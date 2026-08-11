@@ -10,11 +10,17 @@ from queries.voyage_queries import QUERIES
 import os
 import urllib3
 
+QUERY_TIMEOUT_SECONDS = 3
+MAX_CONCURRENT_REQUESTS = 2
+N_QUERIES = len(QUERIES)
+
 def runtime_context():
     return {
-        "container_id": os.environ.get("HOSTNAME", "unknown"),  # NEW — unique per Docker replica
+        # NEW — unique per Docker replica
+        "container_id": os.environ.get("HOSTNAME", "unknown"),
         "worker_pid": os.getpid()
     }
+
 
 class VoyageMatcher:
     def __init__(self, pool_size=12):
@@ -26,36 +32,39 @@ class VoyageMatcher:
             "secure": True,
         }
 
-        self.pool_size = pool_size
+        # self.pool_size = pool_size
 
-        # Shared pool manager with maxsize >= pool_size, so all `pool_size`
-        # clients in this worker can hold a live connection simultaneously
-        # without urllib3 discarding any on release.
-        pool_mgr = urllib3.PoolManager(maxsize=max(pool_size, len(QUERIES)))
+        # # Shared pool manager with maxsize >= pool_size, so all `pool_size`
+        # # clients in this worker can hold a live connection simultaneously
+        # # without urllib3 discarding any on release.
+        # pool_mgr = urllib3.PoolManager(maxsize=max(pool_size, len(QUERIES)),block=False)
+
+        # self._pool = queue.Queue()
+        # for _ in range(pool_size):
+        #     self._pool.put(
+        #         clickhouse_connect.get_client(
+        #             **self.clickhouse_config,
+        #             pool_mgr=pool_mgr,
+        #         )
+        #     )
+        # self._executor = ThreadPoolExecutor(max_workers=min(pool_size,len(QUERIES)))
+
+        # OR
+        #
+        self._pool_size = MAX_CONCURRENT_REQUESTS  * N_QUERIES
+
+        pool_mgr = urllib3.PoolManager(maxsize=self._pool_size)
 
         self._pool = queue.Queue()
-        for _ in range(pool_size):
+
+        for _ in range(self._pool_size):
             self._pool.put(
                 clickhouse_connect.get_client(
                     **self.clickhouse_config,
                     pool_mgr=pool_mgr,
                 )
             )
-        # NEW — the missing piece
-        self._executor = ThreadPoolExecutor(max_workers=len(QUERIES))
-
-    def get_client(self):
-        client = clickhouse_connect.get_client(**self.clickhouse_config)
-
-        logger.info(
-            "clickhouse_client_created request_id=%s",
-            request_id_ctx.get(),
-            extra={
-                "client_id": id(client),
-            },
-        )
-
-        return client
+        self._executor = ThreadPoolExecutor(max_workers=self._pool_size)
 
     @staticmethod
     def substitute_query(query, params):
@@ -83,101 +92,138 @@ class VoyageMatcher:
         query_id,
         query,
         params,
+        request_id,
     ):
         wait_start = time.perf_counter()
+
         available_clients_before = self._pool.qsize()
+
         client = self._pool.get()
+
         client_id = id(client)
+
+        ch_query_id = f"{request_id}-{query_id}"
+
         wait_ms = (time.perf_counter() - wait_start) * 1000
 
         try:
-            with tracer.start_as_current_span(f"query-{query_id}") as span:
+            with tracer.start_as_current_span(
+                f"query-{query_id}"
+            ) as span:
+
+                debug_query = self.substitute_query(
+                    query,
+                    params,
+                )
+
+                start_time = time.perf_counter()
+
+                span.set_attribute(
+                    "voyage.query.id",
+                    query_id,
+                )
+
+                span.set_attribute(
+                    "voyage.query",
+                    debug_query,
+                )
+
+                span.set_attribute(
+                    "voyage.ch_query_id",
+                    ch_query_id,
+                )
+
+                logger.info(
+                    "query_started: query_id=%s request_id=%s client_wait_ms=%.2f",
+                    query_id,
+                    request_id_ctx.get(),
+                    wait_ms,
+                    extra={
+                        "query_id": query_id,
+                        "query": debug_query,
+                        "ch_query_id": ch_query_id,
+                        "client_id": client_id,
+                        "available_clients_before":
+                            available_clients_before,
+                    },
+                )
+
                 try:
-                    # substituted_query = query % params
-                    debug_query = self.substitute_query(query, params)
-
-                    start_time = time.perf_counter()
-
-                    span.set_attribute(
-                        "voyage.query.id",
-                        query_id,
-                    )
-
-                    span.set_attribute(
-                        "voyage.query",
-                        debug_query,
-                    )
-
-                    logger.info(
-                        "query_started: query_id=%s request_id=%s client_wait_ms=%.2f container_id=%s worker_pid=%s",
-                        query_id,
-                        request_id_ctx.get(),
-                        wait_ms,
-                        os.environ.get("HOSTNAME", "unknown"),
-                        os.getpid(),
-                        extra={
-                            "query_id": query_id,
-                            "query": debug_query,
-                            "client_id": client_id,
-                            "available_clients_before": available_clients_before,
-                        },
-                    )
-
                     result = client.query(
                         query,
                         parameters=params,
+                        settings={
+                            "query_id": ch_query_id,
+                            "log_comment":
+                                f"voyage|request={request_id}|query={query_id}",
+                            "max_execution_time":
+                                QUERY_TIMEOUT_SECONDS,
+                        },
                     )
 
-                    elapsed_ms = (time.perf_counter() - start_time) * 1000
+                except Exception as ex:
 
-                    rows = len(result.result_rows)
+                    elapsed_ms = (
+                        time.perf_counter() - start_time
+                    ) * 1000
 
-                    matched = rows > 0
+                    error_message = str(ex)
 
-                    span.set_attribute(
-                        "voyage.query.duration_ms",
-                        elapsed_ms,
+                    is_timeout = (
+                        "TIMEOUT" in error_message.upper()
+                        or "TIMEOUT_EXCEEDED"
+                        in error_message.upper()
+                        or "MAX_EXECUTION_TIME"
+                        in error_message.upper()
                     )
 
-                    span.set_attribute(
-                        "voyage.query.rows",
-                        rows,
-                    )
+                    if is_timeout:
 
-                    span.set_attribute(
-                        "voyage.query.matched",
-                        matched,
-                    )
+                        span.set_attribute(
+                            "voyage.query.timed_out",
+                            True,
+                        )
 
-                    logger.info(
-                        "query_completed query_id=%s request_id=%s query_completed=%s container_id=%s worker_pid=%s",
-                        query_id,
-                        request_id_ctx.get(),
-                        round(elapsed_ms,2),
-                        os.environ.get("HOSTNAME", "unknown"),
-                        os.getpid(),
-                        extra={
+                        span.set_attribute(
+                            "voyage.query.duration_ms",
+                            elapsed_ms,
+                        )
+
+                        logger.warning(
+                            "query_timeout "
+                            "query_id=%s request_id=%s",
+                            query_id,
+                            request_id,
+                            extra={
+                                "query_id": query_id,
+                                "ch_query_id": ch_query_id,
+                                "duration_ms": round(
+                                    elapsed_ms,
+                                    2,
+                                ),
+                                "timeout_seconds":
+                                    QUERY_TIMEOUT_SECONDS,
+                                "error": error_message,
+                            },
+                        )
+
+                        return {
                             "query_id": query_id,
-                            "query": debug_query,
+                            "rows": [],
+                            "columns": [],
                             "duration_ms": round(
                                 elapsed_ms,
                                 2,
                             ),
-                            "rows": rows,
-                            "matched": matched,
-                            "status": 200,
+                            "success": False,
+                            "timed_out": True,
+                            "error": error_message,
                         }
-                    )
 
+                    # -----------------------------------------
+                    # NON-TIMEOUT QUERY ERROR
+                    # -----------------------------------------
 
-                    return {
-                        "query_id": query_id,
-                        "rows": result.result_rows,
-                        "columns": result.column_names,
-                        "duration_ms": round(elapsed_ms, 2)
-                    }
-
-                except Exception as ex:
                     span.record_exception(ex)
 
                     span.set_status(
@@ -191,13 +237,94 @@ class VoyageMatcher:
                         "query_failed",
                         extra={
                             "query_id": query_id,
-                            "status": 500,
+                            "ch_query_id": ch_query_id,
+                            "duration_ms": round(
+                                elapsed_ms,
+                                2,
+                            ),
                         },
                     )
 
-                    raise
+                    return {
+                        "query_id": query_id,
+                        "rows": [],
+                        "columns": [],
+                        "duration_ms": round(
+                            elapsed_ms,
+                            2,
+                        ),
+                        "success": False,
+                        "timed_out": False,
+                        "error": error_message,
+                    }
+
+                # ---------------------------------------------
+                # QUERY SUCCEEDED
+                # ---------------------------------------------
+
+                elapsed_ms = (
+                    time.perf_counter() - start_time
+                ) * 1000
+
+                rows = len(result.result_rows)
+
+                matched = rows > 0
+
+                span.set_attribute(
+                    "voyage.query.duration_ms",
+                    elapsed_ms,
+                )
+
+                span.set_attribute(
+                    "voyage.query.rows",
+                    rows,
+                )
+
+                span.set_attribute(
+                    "voyage.query.matched",
+                    matched,
+                )
+
+                span.set_attribute(
+                    "voyage.query.timed_out",
+                    False,
+                )
+
+                logger.info(
+                    "query_completed "
+                    "query_id=%s request_id=%s "
+                    "duration_ms=%.2f",
+                    query_id,
+                    request_id_ctx.get(),
+                    elapsed_ms,
+                    extra={
+                        "query_id": query_id,
+                        "query": debug_query,
+                        "ch_query_id": ch_query_id,
+                        "duration_ms": round(
+                            elapsed_ms,
+                            2,
+                        ),
+                        "rows": rows,
+                        "matched": matched,
+                        "status": 200,
+                    },
+                )
+
+                return {
+                    "query_id": query_id,
+                    "rows": result.result_rows,
+                    "columns": result.column_names,
+                    "duration_ms": round(
+                        elapsed_ms,
+                        2,
+                    ),
+                    "success": True,
+                    "timed_out": False,
+                }
+
         finally:
-            self._pool.put(client) # return, never client.close()
+            self._pool.put(client)
 
     def execute_query_with_context(
         self,
@@ -217,6 +344,7 @@ class VoyageMatcher:
                 query_id,
                 query,
                 params,
+                request_id
             )
 
         finally:
@@ -261,12 +389,9 @@ class VoyageMatcher:
                 },
             )
 
-            matches = []
-
             parent_context = context.get_current()
 
             request_id = request_id_ctx.get()
-
             db_start = time.perf_counter()
 
             futures = {
@@ -281,17 +406,102 @@ class VoyageMatcher:
                 for query_id, query in QUERIES.items()
             }
 
-            for future in as_completed(futures):
-                result = future.result()
+            matches = []
+            timed_out_queries = []
+            failed_queries = []
 
-                if result["rows"]:
-                    matches.append(result)
+            # Wait for ALL queries to complete.
+            #
+            # There is intentionally NO application-level timeout here.
+            #
+            # Each individual ClickHouse query has its own
+            # QUERY_TIMEOUT_SECONDS timeout.
+            for future in as_completed(futures):
+                query_id = futures[future]
+
+                try:
+                    result = future.result()
+
+                    if result["timed_out"]:
+                        timed_out_queries.append(query_id)
+
+                    elif not result["success"]:
+                        failed_queries.append({
+                            "query_id": query_id,
+                            "error": result.get("error"),
+                        })
+
+                    elif result["rows"]:
+                        matches.append(result)
+
+                except Exception as ex:
+                    failed_queries.append({
+                        "query_id": query_id,
+                        "error": str(ex),
+                    })
+
+                    logger.exception(
+                        "query_future_failed",
+                        extra={
+                            "query_id": query_id,
+                            "request_id": request_id,
+                            **runtime_context(),
+                        },
+                    )
 
             db_wall_time_ms = (time.perf_counter() - db_start) * 1000
 
             total_time_ms = (time.perf_counter() - request_start) * 1000
 
+            # ---------------------------------------------------------
+            # ANY QUERY TIMEOUT
+            #
+            # ClickHouse itself timed out one or more queries.
+            # This is the only timeout being handled here.
+            # ---------------------------------------------------------
+            if timed_out_queries:
+
+                return {
+                    "success": False,
+                    "matched": False,
+                    "timed_out": True,
+                    "timed_out_queries": timed_out_queries,
+                    "request_timeout_queries": [],
+                    "request_id": request_id,
+                    "db_time_ms": round(
+                        db_wall_time_ms,
+                        2,
+                    ),
+                }
+
+            # ---------------------------------------------------------
+            # ANY NON-TIMEOUT QUERY ERROR
+            #
+            # A query failed, but it did not time out.
+            # ---------------------------------------------------------
+
+            if failed_queries:
+
+                return {
+                    "success": False,
+                    "matched": False,
+                    "timed_out": False,
+                    "request_timeout": False,
+                    "failed_queries": failed_queries,
+                    "request_id": request_id,
+                    "db_time_ms": round(
+                        db_wall_time_ms,
+                        2,
+                    ),
+                }
+
+
+            # ---------------------------------------------------------
+            # ALL QUERIES SUCCEEDED, BUT NOTHING MATCHED
+            # ---------------------------------------------------------
+
             if not matches:
+
                 span.set_attribute(
                     "voyage.match.success",
                     False,
@@ -306,18 +516,36 @@ class VoyageMatcher:
                             total_time_ms,
                             2,
                         ),
-                        "db_time_ms": round(db_wall_time_ms, 2),
+                        "db_time_ms": round(
+                            db_wall_time_ms,
+                            2,
+                        ),
                         "status": 200,
                         "matched": False,
-                        **runtime_context()
+                        "success": True,
+                        "timed_out": False,
+                        "request_timeout": False,
+                        **runtime_context(),
                     },
                 )
 
                 return {
+                    "success": True,
                     "matched": False,
-                    "request_id": request_id_ctx.get(),
-                    "db_time_ms": round(db_wall_time_ms, 2),
+                    "timed_out": False,
+                    "request_timeout": False,
+                    "timed_out_queries": [],
+                    "request_id": request_id,
+                    "db_time_ms": round(
+                        db_wall_time_ms,
+                        2,
+                    ),
                 }
+
+
+            # ---------------------------------------------------------
+            # MATCH FOUND
+            # ---------------------------------------------------------
 
             best_match = min(
                 matches,
@@ -343,17 +571,30 @@ class VoyageMatcher:
                         total_time_ms,
                         2,
                     ),
-                    "db_time_ms": round(db_wall_time_ms, 2),
+                    "db_time_ms": round(
+                        db_wall_time_ms,
+                        2,
+                    ),
                     "status": 200,
                     "matched": True,
+                    "success": True,
+                    "timed_out": False,
+                    "request_timeout": False,
                     "query_id": best_match["query_id"],
-                    **runtime_context()
+                    **runtime_context(),
                 },
             )
 
             return {
+                "success": True,
                 "matched": True,
-                "request_id": request_id_ctx.get(),
+                "timed_out": False,
+                "request_timeout": False,
+                "timed_out_queries": [],
+                "request_id": request_id,
                 "query": best_match["query_id"],
-                "db_time_ms": round(db_wall_time_ms, 2)
+                "db_time_ms": round(
+                    db_wall_time_ms,
+                    2,
+                ),
             }

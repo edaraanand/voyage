@@ -18,4 +18,4 @@ ENV LOG_LEVEL=INFO
 
 EXPOSE 5003
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5003", "--workers", "2", "--threads", "4", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5003", "--workers", "4", "--threads", "2", "--timeout", "5", "app:app"]
