@@ -11,11 +11,21 @@ COPY . .
 ENV PYTHONUNBUFFERED=1
 
 # OpenTelemetry Collector endpoint inside Kubernetes
-# ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4318
-ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4318
 
 ENV LOG_LEVEL=INFO
+ENV GUNICORN_WORKERS=4
+ENV GUNICORN_THREADS=8
+ENV MAX_CONCURRENT_REQUESTS=8
+ENV GUNICORN_TIMEOUT=15
 
-EXPOSE 5003
+EXPOSE 5000
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5003", "--workers", "4", "--threads", "2", "--timeout", "5", "app:app"]
+# CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "4", "app:app"]
+
+CMD gunicorn --bind 0.0.0.0:5000 \
+    --worker-class gthread \
+    --workers ${GUNICORN_WORKERS} \
+    --threads ${GUNICORN_THREADS} \
+    --timeout ${GUNICORN_TIMEOUT} \
+    app:app

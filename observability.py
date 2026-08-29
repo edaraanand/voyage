@@ -1,7 +1,7 @@
 import logging
 import os
-from contextvars import ContextVar
 import threading
+from contextvars import ContextVar
 
 from opentelemetry import metrics, trace
 from opentelemetry._logs import set_logger_provider
@@ -18,28 +18,17 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-#
-# Request context
-#
+SERVICE_NAME = "voyage-matcher-k8s"
+
+OTEL_COLLECTOR = os.getenv(
+    "OTEL_COLLECTOR_ENDPOINT",
+    "http://otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4318",
+)
 
 request_id_ctx = ContextVar(
     "request_id",
     default="unknown",
 )
-
-
-OTEL_COLLECTOR = os.getenv(
-    "OTEL_COLLECTOR_ENDPOINT",
-    "http://otel-collector:4318",
-)
-
-
-SERVICE_NAME = "voyage-matcher"
-
-
-#
-# Resource metadata
-#
 
 resource = Resource.create(
     {
@@ -50,38 +39,12 @@ resource = Resource.create(
 )
 
 
-#
-# Logging enrichment
-#
-
-
-# class OtelContextFilter(logging.Filter):
-#     def filter(self, record):
-
-#         # Trace fields
-#         if not hasattr(record, "otelTraceID"):
-#             record.otelTraceID = "0"
-
-#         if not hasattr(record, "otelSpanID"):
-#             record.otelSpanID = "0"
-
-#         # Request correlation
-#         record.request_id = request_id_ctx.get()
-
-#         # Service metadata
-#         record.service_name = SERVICE_NAME
-
-#         return True
-
-
 class OtelContextFilter(logging.Filter):
     def filter(self, record):
         if not hasattr(record, "otelTraceID"):
             record.otelTraceID = "0"
-
         if not hasattr(record, "otelSpanID"):
             record.otelSpanID = "0"
-
         record.request_id = request_id_ctx.get()
         record.service_name = SERVICE_NAME
 
@@ -104,100 +67,62 @@ class OtelContextFilter(logging.Filter):
             "worker_thread_name",
             threading.current_thread().name,
         )
-
         return True
-
-
-#
-# Configure everything
-#
 
 
 def configure_observability(app):
 
     #
-    # -------------------------
     # Tracing
-    # -------------------------
     #
-
     trace_provider = TracerProvider(resource=resource)
-
     trace_provider.add_span_processor(
-        BatchSpanProcessor(OTLPSpanExporter(endpoint=f"{OTEL_COLLECTOR}/v1/traces"))
+        BatchSpanProcessor(
+            OTLPSpanExporter(endpoint=f"{OTEL_COLLECTOR}/v1/traces")
+        )
     )
-
     trace.set_tracer_provider(trace_provider)
 
     #
-    # -------------------------
     # Metrics
-    # -------------------------
     #
-
     metric_reader = PeriodicExportingMetricReader(
         OTLPMetricExporter(endpoint=f"{OTEL_COLLECTOR}/v1/metrics")
     )
-
     meter_provider = MeterProvider(
         resource=resource,
         metric_readers=[metric_reader],
     )
-
     metrics.set_meter_provider(meter_provider)
 
     #
-    # -------------------------
-    # Logs
-    # -------------------------
+    # Logs — send directly to OTel collector instead of relying on stdout scraping
     #
-
     logger_provider = LoggerProvider(resource=resource)
-
     set_logger_provider(logger_provider)
 
     logger_provider.add_log_record_processor(
         BatchLogRecordProcessor(OTLPLogExporter(endpoint=f"{OTEL_COLLECTOR}/v1/logs"))
     )
 
-    #
-    # Inject OTEL trace context
-    #
-
+    # Inject OTEL trace context into stdlib log records
     LoggingInstrumentor().instrument(set_logging_format=False)
 
     root_logger = logging.getLogger()
-
-    root_logger.setLevel(
-        os.getenv(
-            "LOG_LEVEL",
-            "INFO",
-        )
-    )
-
+    root_logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
     root_logger.handlers.clear()
 
-    #
-    # OTLP logging handler
-    #
-
+    # OTLP handler — ships structured log records straight to the collector
     otlp_handler = LoggingHandler(
         level=logging.INFO,
         logger_provider=logger_provider,
     )
-
     otlp_handler.addFilter(OtelContextFilter())
-
     root_logger.addHandler(otlp_handler)
 
-    #
-    # Console logging
-    #
-
+    # Console handler — still useful for `kubectl logs`, now with full context
     console_handler = logging.StreamHandler()
-
     console_handler.addFilter(OtelContextFilter())
-
     console_handler.setFormatter(
         logging.Formatter(
             "%(asctime)s "
@@ -216,24 +141,14 @@ def configure_observability(app):
             "client_wait_ms=%(client_wait_ms)s "
         )
     )
-
     root_logger.addHandler(console_handler)
 
     #
-    # Flask tracing
+    # Flask
     #
-
     FlaskInstrumentor().instrument_app(app)
 
 
-#
-# Application tracer/meter/logger
-#
-
 tracer = trace.get_tracer(SERVICE_NAME)
-
-
 meter = metrics.get_meter(SERVICE_NAME)
-
-
 logger = logging.getLogger(SERVICE_NAME)

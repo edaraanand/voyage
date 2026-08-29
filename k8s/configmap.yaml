@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: voyage-config
+  namespace: voyage
+
+data:
+  LOG_LEVEL: "INFO"
+  OTEL_SERVICE_NAME: "voyage-matcher"
+  OTEL_ENVIRONMENT: "production"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4318"

@@ -287,6 +287,92 @@ if __name__ == "__main__":
 
     app.run(
         host="0.0.0.0",
-        port=5003,
+        port=8080,
         debug=True,
     )
+
+"""
+gunicorn \
+  --bind 0.0.0.0:5003 \
+  --workers 2 \
+  --threads 4 \
+  app:app
+
+Container
+│
+└── Gunicorn
+    │
+    ├── Master Process
+    │
+    ├── Worker Process PID 8
+    │   │
+    │   ├── Request Thread Pool (4 threads)
+    │   │   │
+    │   │   ├── Request Thread 1
+    │   │   │   │
+    │   │   │   └── Application code
+    │   │   │       │
+    │   │   │       └── matcher.match()
+    │   │   │           │
+    │   │   │           └── ThreadPoolExecutor (12)
+    │   │   │               ├── Query Thread 1  - ThreadPoolExecutor-3_0  <-- query
+    │   │   │               ├── Query Thread .  - ThreadPoolExecutor-3_1  <-- query
+    │   │   │               └── Query Thread 12 - ThreadPoolExecutor-3_9  <-- query
+    │   │   │
+    │   │   ├── Request Thread 2
+    │   │   ├── Request Thread 3
+    │   │   └── Request Thread 4
+    │   │
+    │   └── Other process resources
+    │
+    └── Worker Process PID 9
+        │
+        ├── Request Thread Pool (4 threads)
+        │   │
+        │   ├── Request Thread 1
+        │   │   │
+        │   │   ├── Request Thread 1
+        │   │   │   │
+        │   │   │   └── Application code
+        │   │   │       │
+        │   │   │       └── matcher.match()
+        │   │   │           │
+        │   │   │           └── ThreadPoolExecutor (12)
+        │   │   │               ├── Query Thread 1  - ThreadPoolExecutor-3_0  <-- query
+        │   │   │               ├── Query Thread .  - ThreadPoolExecutor-3_1  <-- query
+        │   │   │               └── Query Thread 12 - ThreadPoolExecutor-3_9  <-- query
+        │   │   │
+        │   ├── Request Thread 2
+        │   ├── Request Thread 3
+        │   └── Request Thread 4
+        │
+        └── Other process resources
+
+
+Gunicorn worker process (PID 8)
+│
+├── Gunicorn request thread
+│       |
+│       | calls matcher.match()
+│       |
+│       └── ThreadPoolExecutor
+│               |
+│               ├── ThreadPoolExecutor-3_0  <-- query
+│               ├── ThreadPoolExecutor-3_1  <-- query
+│               ├── ThreadPoolExecutor-3_2  <-- query
+│               └── ThreadPoolExecutor-3_9  <-- query
+
+0ms                 500ms          2.0s          2.5s          3.0s
+│                     │              │             │              │
+│                     │              │             │              │
+├─ connect ───────────┤              │             │              │
+│                     │              │             │              │
+│                     ├─ query ──────┤             │              │
+│                     │              │             │              │
+│                     │              ├─ network ───┤              │
+│                     │              │             │              │
+│                     │              │             │       APPLICATION
+│                     │              │             │          DEADLINE
+│                     │              │             │              │
+0                     .5s            2s           2.5s            3s
+"""
