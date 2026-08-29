@@ -26,8 +26,7 @@ spec:
       containers:
         - name: voyage-matcher
 
-          image: edaraanand/voyage-app:v4
-
+          image: edaraanand/voyage-app:v5
           imagePullPolicy: Always
 
           ports:
