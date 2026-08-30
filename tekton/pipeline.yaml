@@ -19,6 +19,7 @@ spec:
     - name: shared-workspace   # source code lives here across all tasks
     - name: docker-credentials # holds .docker/config.json for kaniko push auth
     - name: git-credentials    # holds git ssh key or https token for the commit-back step
+    - name: cosign-key         # holds the cosign private key for image signing
 
   tasks:
     # Stage 1: clone the repo
@@ -34,6 +35,32 @@ spec:
         - name: revision
           value: $(params.revision)
 
+    # --- Supply chain / manifest gates — run in parallel with tests, before build ---
+
+    - name: dockerfile-lint
+      runAfter: ["fetch-source"]
+      taskRef:
+        name: hadolint-scan
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+
+    - name: secret-scan
+      runAfter: ["fetch-source"]
+      taskRef:
+        name: gitleaks-scan
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+
+    - name: manifest-scan
+      runAfter: ["fetch-source"]
+      taskRef:
+        name: checkov-scan
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+
     # Stage 2: run tests
     - name: run-tests
       runAfter: ["fetch-source"]
@@ -43,9 +70,9 @@ spec:
         - name: source
           workspace: shared-workspace
 
-    # Stage 3: build and push the image with kaniko
+    # Stage 3: build and push the image with kaniko — waits on every gate above
     - name: build-and-push
-      runAfter: ["run-tests"]
+      runAfter: ["run-tests", "dockerfile-lint", "secret-scan", "manifest-scan"]
       taskRef:
         name: kaniko
       workspaces:
@@ -55,6 +82,32 @@ spec:
           workspace: docker-credentials
       params:
         - name: IMAGE
+          value: $(params.image-name):$(tasks.fetch-source.results.commit)
+
+    # --- Post-build supply chain artifacts — run in parallel with the vuln scan ---
+
+    - name: sbom
+      runAfter: ["build-and-push"]
+      taskRef:
+        name: syft-sbom
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+      params:
+        - name: image
+          value: $(params.image-name):$(tasks.fetch-source.results.commit)
+
+    - name: sign-image
+      runAfter: ["build-and-push"]
+      taskRef:
+        name: cosign-sign
+      workspaces:
+        - name: docker-credentials
+          workspace: docker-credentials
+        - name: cosign-key
+          workspace: cosign-key
+      params:
+        - name: image
           value: $(params.image-name):$(tasks.fetch-source.results.commit)
 
     # Stage 4: scan the image for vulnerabilities
@@ -68,7 +121,7 @@ spec:
 
     # Stage 5: bump the image tag in k8s/deployment.yaml and commit — ArgoCD picks this up
     - name: update-manifest
-      runAfter: ["scan-image"]
+      runAfter: ["scan-image", "sbom", "sign-image"]
       taskRef:
         name: update-manifest
       workspaces:

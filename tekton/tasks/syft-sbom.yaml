@@ -1,0 +1,20 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: syft-sbom
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: image
+      type: string
+  workspaces:
+    - name: source   # used only to persist the SBOM output alongside the repo checkout
+  steps:
+    - name: generate-sbom
+      image: anchore/syft:latest
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/bin/sh
+        set -e
+        syft $(params.image) -o cyclonedx-json=sbom.cyclonedx.json
+        echo "SBOM written to $(workspaces.source.path)/sbom.cyclonedx.json"

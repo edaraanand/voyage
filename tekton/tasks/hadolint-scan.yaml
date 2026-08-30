@@ -1,0 +1,18 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: hadolint-scan
+  namespace: tekton-pipelines
+spec:
+  workspaces:
+    - name: source
+  steps:
+    - name: lint
+      image: hadolint/hadolint:latest-debian
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/bin/sh
+        set -e
+        # --failure-threshold warning: fail on warning-level findings and above.
+        # Raise to "error" if this is too strict while you're getting started.
+        hadolint --failure-threshold warning Dockerfile

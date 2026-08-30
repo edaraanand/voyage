@@ -34,3 +34,6 @@ spec:
     - name: git-credentials
       secret:
         secretName: git-credentials
+    - name: cosign-key
+      secret:
+        secretName: cosign-key-file

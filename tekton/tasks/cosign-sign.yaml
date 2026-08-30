@@ -1,0 +1,30 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: cosign-sign
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: image
+      type: string
+  workspaces:
+    - name: docker-credentials
+    - name: cosign-key
+  steps:
+    - name: sign
+      image: gcr.io/projectsigstore/cosign:latest
+      env:
+        - name: DOCKER_CONFIG
+          value: $(workspaces.docker-credentials.path)
+        - name: COSIGN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: cosign-key-secret
+              key: password
+      command: ["/ko-app/cosign"]
+      args:
+        - "sign"
+        - "--yes"
+        - "--key"
+        - "$(workspaces.cosign-key.path)/cosign.key"
+        - "$(params.image)"
