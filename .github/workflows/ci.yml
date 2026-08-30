@@ -20,6 +20,7 @@ jobs:
         with:
           dockerfile: Dockerfile
           failure-threshold: warning   # fails on warning+ (bad practices, missing pins, etc.)
+          # failure-threshold: error   # fails on error (bad practices, missing pins, etc.)
 
   secret-scan:
     runs-on: ubuntu-latest
