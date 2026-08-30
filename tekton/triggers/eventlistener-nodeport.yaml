@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: el-voyage-listener-nodeport
+  namespace: tekton-pipelines
+spec:
+  type: NodePort
+  selector:
+    eventlistener: voyage-listener
+  ports:
+    - name: http-listener
+      port: 8080
+      targetPort: 8080
+      protocol: TCP

@@ -1,0 +1,48 @@
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: voyage-trigger-template
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: repo-url
+    - name: revision
+    - name: image-name
+      default: docker.io/edaraanand/voyage   # your Docker Hub image
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1
+      kind: PipelineRun
+      metadata:
+        generateName: voyage-ci-run-
+        namespace: tekton-pipelines
+      spec:
+        taskRunTemplate:
+          podTemplate:
+            securityContext:
+              fsGroup: 65532
+        pipelineRef:
+          name: voyage-ci-pipeline
+        params:
+          - name: repo-url
+            value: $(tt.params.repo-url)
+          - name: image-name
+            value: $(tt.params.image-name)
+          - name: revision
+            value: $(tt.params.revision)
+        workspaces:
+          - name: shared-workspace
+            volumeClaimTemplate:
+              spec:
+                accessModes: ["ReadWriteOnce"]
+                resources:
+                  requests:
+                    storage: 1Gi
+          - name: docker-credentials
+            secret:
+              secretName: docker-credentials
+              items:
+                - key: .dockerconfigjson
+                  path: config.json
+          - name: git-credentials
+            secret:
+              secretName: git-credentials
