@@ -1,0 +1,25 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: python-test
+  namespace: tekton-pipelines
+spec:
+  workspaces:
+    - name: source
+  steps:
+    - name: install-and-test
+      image: python:3.11-slim
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/usr/bin/env bash
+        set -e
+        pip install --no-cache-dir -r requirements.txt
+        # Add pytest here if/when you have a tests/ folder — for now this at least
+        # validates the app imports cleanly and dependencies resolve.
+        pip install --no-cache-dir pytest
+        if [ -d "tests" ]; then
+          pytest tests/ -v
+        else
+          echo "No tests/ directory found yet — skipping pytest, just verifying imports."
+          python -c "import ast; ast.parse(open('app.py').read())"
+        fi

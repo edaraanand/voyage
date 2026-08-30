@@ -32,6 +32,19 @@ spec:
           ports:
             - containerPort: 5000
 
+          env:
+            - name: CLICKHOUSE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: clickhouse-secret
+                  key: CLICKHOUSE_USERNAME
+
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: clickhouse-secret
+                  key: CLICKHOUSE_PASSWORD
+
           envFrom:
             - configMapRef:
                 name: voyage-config

@@ -1,0 +1,83 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: voyage-ci-pipeline
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: repo-url
+      type: string
+      description: Git repo URL to clone
+    - name: image-name
+      type: string
+      description: Full image name without tag, e.g. ghcr.io/yourname/voyage
+    - name: revision
+      type: string
+      default: main
+
+  workspaces:
+    - name: shared-workspace   # source code lives here across all tasks
+    - name: docker-credentials # holds .docker/config.json for kaniko push auth
+    - name: git-credentials    # holds git ssh key or https token for the commit-back step
+
+  tasks:
+    # Stage 1: clone the repo
+    - name: fetch-source
+      taskRef:
+        name: git-clone
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: url
+          value: $(params.repo-url)
+        - name: revision
+          value: $(params.revision)
+
+    # Stage 2: run tests
+    - name: run-tests
+      runAfter: ["fetch-source"]
+      taskRef:
+        name: python-test
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+
+    # Stage 3: build and push the image with kaniko
+    - name: build-and-push
+      runAfter: ["run-tests"]
+      taskRef:
+        name: kaniko
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+        - name: dockerconfig
+          workspace: docker-credentials
+      params:
+        - name: IMAGE
+          value: $(params.image-name):$(tasks.fetch-source.results.commit)
+
+    # Stage 4: scan the image for vulnerabilities
+    - name: scan-image
+      runAfter: ["build-and-push"]
+      taskRef:
+        name: trivy-scanner
+      params:
+        - name: image
+          value: $(params.image-name):$(tasks.fetch-source.results.commit)
+
+    # Stage 5: bump the image tag in k8s/deployment.yaml and commit — ArgoCD picks this up
+    - name: update-manifest
+      runAfter: ["scan-image"]
+      taskRef:
+        name: update-manifest
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+        - name: git-credentials
+          workspace: git-credentials
+      params:
+        - name: image-name
+          value: $(params.image-name)
+        - name: image-tag
+          value: $(tasks.fetch-source.results.commit)

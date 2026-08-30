@@ -1,0 +1,36 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: voyage-ci-run-
+  namespace: tekton-pipelines
+spec:
+  taskRunTemplate:
+    podTemplate:
+      securityContext:
+        fsGroup: 65532   # matches the group most Tekton catalog task images run as
+  pipelineRef:
+    name: voyage-ci-pipeline
+  params:
+    - name: repo-url
+      value: https://github.com/edaraanand/voyage.git
+    - name: image-name
+      value: docker.io/edaraanand/voyage
+    - name: revision
+      value: main
+  workspaces:
+    - name: shared-workspace
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
+    - name: docker-credentials
+      secret:
+        secretName: docker-credentials
+        items:
+          - key: .dockerconfigjson
+            path: config.json
+    - name: git-credentials
+      secret:
+        secretName: git-credentials
