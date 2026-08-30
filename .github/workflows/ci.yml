@@ -8,6 +8,45 @@ env:
   IMAGE_NAME: docker.io/edaraanand/voyage
 
 jobs:
+  # --- Supply Chain Security (CKS Domain: Supply Chain Security) ---
+  dockerfile-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Lint Dockerfile with Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: warning   # fails on warning+ (bad practices, missing pins, etc.)
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # gitleaks needs full history to scan past commits too
+
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  manifest-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Static analysis of Kubernetes manifests
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: k8s/
+          framework: kubernetes
+          soft_fail: true   # report-only for now — set to false once manifests are hardened
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -34,10 +73,11 @@ jobs:
           fi
 
   build-and-push:
-    needs: test
+    needs: [test, dockerfile-lint, secret-scan, manifest-scan]
     runs-on: ubuntu-latest
     outputs:
       image-tag: ${{ steps.vars.outputs.sha_short }}
+      image-digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -56,6 +96,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -63,6 +104,44 @@ jobs:
           tags: ${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.sha_short }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  sbom:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate SBOM with Syft
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.image-tag }}
+          format: cyclonedx-json
+          output-file: sbom.cyclonedx.json
+
+      - name: Upload SBOM as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cyclonedx.json
+          retention-days: 90
+
+  sign-image:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # required for keyless signing via GitHub OIDC
+      contents: read
+    steps:
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Sign image (keyless)
+        run: |
+          cosign sign --yes ${{ env.IMAGE_NAME }}@${{ needs.build-and-push.outputs.image-digest }}
 
   scan-image:
     needs: build-and-push
@@ -76,7 +155,7 @@ jobs:
           exit-code: "0"   # report-only for now — flip to "1" once you're ready to enforce it
 
   update-manifest:
-    needs: [build-and-push, scan-image]
+    needs: [build-and-push, scan-image, sbom, sign-image]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
