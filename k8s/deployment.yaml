@@ -26,7 +26,7 @@ spec:
       containers:
         - name: voyage-matcher
 
-          image: docker.io/edaraanand/voyage:8062ddb7a6352b99a1dda71d7b940f4420cdb86e
+          image: docker.io/edaraanand/voyage:fe40eca
           imagePullPolicy: Always
 
           ports:
