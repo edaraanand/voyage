@@ -184,7 +184,7 @@ class VoyageMatcher:
                             # the query (and the connection + thread holding
                             # it) hanging until gunicorn's own timeout
                             # SIGKILLs the whole worker process.
-                            # "max_execution_time": QUERY_TIMEOUT_SECONDS,
+                            "max_execution_time": QUERY_TIMEOUT_SECONDS,
                         },
                     )
 
