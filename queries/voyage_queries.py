@@ -1,8 +1,9 @@
 # queries/poc_queries.py
-
+# SELECT 1 AS match_criteria
+#
 QUERY1 = """
-SELECT 1 AS match_criteria
-FROM customer_voyage_profile_v2
+SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
+FROM customer_voyage_profile_v3
 WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
   AND lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
@@ -12,8 +13,8 @@ LIMIT 1
 
 
 QUERY2 = """
-SELECT 2 AS match_criteria
-FROM customer_voyage_profile_v2
+SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
+FROM customer_voyage_profile_v3
 WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
   AND lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
@@ -24,8 +25,8 @@ LIMIT 1
 
 
 QUERY3 = """
-SELECT 3 AS match_criteria
-FROM customer_voyage_profile_v2
+SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
+FROM customer_voyage_profile_v3
 WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
   AND lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
@@ -36,8 +37,8 @@ LIMIT 1
 
 
 QUERY4 = """
-SELECT 4 AS match_criteria
-FROM customer_voyage_profile_v2
+SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
+FROM customer_voyage_profile_v3
 WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
   AND lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
@@ -52,8 +53,8 @@ LIMIT 1
 
 
 QUERY5 = """
-SELECT 5 AS match_criteria
-FROM customer_voyage_profile_v2
+SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
+FROM customer_voyage_profile_v3
 WHERE lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
   AND lower(email_contact) = lower(%(email_contact)s)
@@ -67,8 +68,8 @@ LIMIT 1
 
 
 QUERY6 = """
-SELECT 6 AS match_criteria
-FROM customer_voyage_profile_v2
+SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
+FROM customer_voyage_profile_v3
 WHERE lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
   AND lower(email_contact) = lower(%(email_contact)s)
@@ -83,8 +84,8 @@ LIMIT 1
 
 
 QUERY7 = """
-SELECT 7 AS match_criteria
-FROM customer_voyage_profile_v2
+SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
+FROM customer_voyage_profile_v3
 WHERE lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
   AND date_of_birth = %(date_of_birth)s
@@ -98,8 +99,8 @@ LIMIT 1
 
 
 QUERY8 = """
-SELECT 8 AS match_criteria
-FROM customer_voyage_profile_v2
+SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
+FROM customer_voyage_profile_v3
 WHERE lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
   AND date_of_birth = %(date_of_birth)s
@@ -114,8 +115,8 @@ LIMIT 1
 
 
 QUERY9 = """
-SELECT 9 AS match_criteria
-FROM customer_voyage_profile_v2
+SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
+FROM customer_voyage_profile_v3
 WHERE lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
   AND date_of_birth = %(date_of_birth)s
@@ -133,8 +134,8 @@ LIMIT 1
 
 
 QUERY10 = """
-SELECT 10 AS match_criteria
-FROM customer_voyage_profile_v2
+SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
+FROM customer_voyage_profile_v3
 WHERE lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
   AND date_of_birth = %(date_of_birth)s
@@ -153,8 +154,8 @@ LIMIT 1
 
 
 QUERY11 = """
-SELECT 11 AS match_criteria
-FROM customer_voyage_profile_v2
+SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
+FROM customer_voyage_profile_v3
 WHERE lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
   AND lower(email_contact) = lower(%(email_contact)s)
@@ -165,8 +166,8 @@ LIMIT 1
 
 
 QUERY12 = """
-SELECT 12 AS match_criteria
-FROM customer_voyage_profile_v2
+SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
+FROM customer_voyage_profile_v3
 WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
   AND lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
@@ -174,6 +175,38 @@ WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
 ORDER BY most_recent_sailing_date_1 DESC
 LIMIT 1
 """
+
+QUERY12_TEMPLATE = """
+SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
+FROM customer_voyage_profile_v3
+WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
+  AND lower(given_name) = lower(%(given_name)s)
+  AND lower(surname) = lower(%(surname)s)
+  {membership_date_predicate}
+ORDER BY most_recent_sailing_date_1 DESC
+LIMIT 1
+"""
+
+
+def build_query12(params):
+    """
+    membership_start_date_1 is a Date32 column. ClickHouse correctly
+    rejects comparing it to an empty string, which is what we were
+    sending whenever the caller had no membership date to give us.
+
+    Per chdb's recommendation (option 1): when the value is missing,
+    omit the predicate entirely rather than forcing a '' -> Date32
+    conversion or defaulting it. A missing membership date means that
+    criterion just doesn't participate in the match.
+    """
+    membership_start_date_1 = params.get("membership_start_date_1")
+
+    if membership_start_date_1:
+        predicate = "AND membership_start_date_1 = %(membership_start_date_1)s"
+    else:
+        predicate = ""
+
+    return QUERY12_TEMPLATE.format(membership_date_predicate=predicate)
 
 QUERIES = {
     1: QUERY1,
@@ -187,7 +220,7 @@ QUERIES = {
     9: QUERY9,
     10: QUERY10,
     11: QUERY11,
-    12: QUERY12,
+    12: build_query12,
 }
 
 # QUERIES = {1: QUERY1, 2: QUERY2}
