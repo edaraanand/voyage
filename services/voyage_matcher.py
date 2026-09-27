@@ -24,7 +24,7 @@ import urllib3
 # slow queries could run indefinitely, holding a pooled connection and a
 # thread hostage until gunicorn's own --timeout SIGKILLed the whole worker.
 QUERY_TIMEOUT_SECONDS = int(os.environ.get("QUERY_TIMEOUT_SECONDS", 1))
-
+CLIENT_TIMEOUT_SECONDS = 1.5
 # How many requests THIS PROCESS will allow to be actively running their
 # fan-out of 12 queries at the same time. Anything beyond this queues on a
 # semaphore instead of being admitted straight into ClickHouse.
@@ -54,8 +54,8 @@ class VoyageMatcher:
     def __init__(self):
         self.clickhouse_config = {
             "host": "bdx31tl6ut.us-central1.gcp.clickhouse.cloud",
-            "username": os.environ["CLICKHOUSE_USERNAME"],
-            "password": os.environ["CLICKHOUSE_PASSWORD"],
+            "username": "voyage_fid",
+            "password": "Clickhouse@2020h",
             "database": "default",
             "secure": True,
         }
@@ -211,15 +211,18 @@ class VoyageMatcher:
 
                         logger.warning(
                             "query_timeout "
-                            "query_id=%s request_id=%s",
+                            "query_id=%s request_id=%s duration_ms=%s timeout_type=%s",
                             query_id,
                             request_id,
+                            round(elapsed_ms, 2),
+                            "clickhouse_exception_1s",
                             extra={
                                 "query_id": query_id,
                                 "ch_query_id": ch_query_id,
                                 "duration_ms": round(elapsed_ms, 2),
                                 "timeout_seconds": QUERY_TIMEOUT_SECONDS,
                                 "error": error_message,
+                                "timeout_type": "clickhouse_exception_1s",
                             },
                         )
 
@@ -241,7 +244,10 @@ class VoyageMatcher:
                     span.set_status(Status(StatusCode.ERROR, str(ex)))
 
                     logger.exception(
-                        "query_failed",
+                        "query_failed query_id=%s request_id=%s error_type=%s",
+                        query_id,
+                        request_id,
+                        "clickhouse_exception",
                         extra={
                             "query_id": query_id,
                             "ch_query_id": ch_query_id,
@@ -264,6 +270,63 @@ class VoyageMatcher:
                 # ---------------------------------------------
 
                 elapsed_ms = (time.perf_counter() - start_time) * 1000
+
+                # IMPORTANT:
+                # Even if ClickHouse returned successfully, treat the
+                # query as timed out if it exceeded our application
+                # timeout threshold.
+                #
+                if elapsed_ms > QUERY_TIMEOUT_SECONDS * 1000:
+                    span.set_attribute(
+                        "voyage.query.timed_out",
+                        True,
+                    )
+
+                    span.set_attribute(
+                        "voyage.query.timeout_type",
+                        "application_sla",
+                    )
+
+                    span.set_attribute("voyage.query.duration_ms", elapsed_ms)
+
+                    logger.warning(
+                        "query_timeout "
+                        "query_id=%s request_id=%s "
+                        "duration_ms=%.2f "
+                        "timeout_type=%s",
+                        query_id,
+                        request_id,
+                        elapsed_ms,
+                        "application_sla_1s",
+                        extra={
+                            "query_id": query_id,
+                            "ch_query_id": ch_query_id,
+                            "duration_ms": round(elapsed_ms, 2),
+                            "timeout_seconds": QUERY_TIMEOUT_SECONDS,
+                            "timeout_type": "application_sla_1s",
+                            "error": (
+                                "Query completed successfully but "
+                                "exceeded application SLA"
+                            ),
+                        },
+                    )
+
+                    return {
+                        "query_id": query_id,
+                        "rows": [],
+                        "columns": [],
+                        "duration_ms": round(elapsed_ms, 2),
+                        "success": False,
+                        "timed_out": True,
+                        "timeout_type": "application_sla_1s",
+                        "error": (
+                            f"Query completed successfully in "
+                            f"{elapsed_ms:.2f}ms but exceeded "
+                            f"{QUERY_TIMEOUT_SECONDS}s application SLA"
+                        ),
+                    }
+
+                print(result.result_rows)
 
                 rows = len(result.result_rows)
 
@@ -401,7 +464,8 @@ class VoyageMatcher:
                         parent_context,
                         request_id,
                         query_id,
-                        query,
+                        # query,
+                        query(params) if callable(query) else query,
                         params,
                     ): query_id
                     for query_id, query in QUERIES.items()
