@@ -1,6 +1,3 @@
-# queries/poc_queries.py
-# SELECT 1 AS match_criteria
-#
 QUERY1 = """
 SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
 FROM customer_voyage_profile_v3
@@ -17,9 +14,9 @@ SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
 FROM customer_voyage_profile_v3
 WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
   AND lower(given_name) = lower(%(given_name)s)
-  AND lower(surname) = lower(%(surname)s)
   AND lower(email_contact) = lower(%(email_contact)s)
   AND date_of_birth = %(date_of_birth)s
+  AND lower(surname) != lower(%(surname)s)
 LIMIT 1
 """
 
@@ -29,9 +26,9 @@ SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
 FROM customer_voyage_profile_v3
 WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
   AND lower(given_name) = lower(%(given_name)s)
-  AND lower(surname) = lower(%(surname)s)
-  AND date_of_birth = %(date_of_birth)s
   AND contact_number = toString(%(contact_number)s)
+  AND date_of_birth = %(date_of_birth)s
+  AND lower(surname) != lower(%(surname)s)
 LIMIT 1
 """
 
@@ -41,13 +38,11 @@ SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
 FROM customer_voyage_profile_v3
 WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
   AND lower(given_name) = lower(%(given_name)s)
-  AND lower(surname) = lower(%(surname)s)
-  AND date_of_birth = %(date_of_birth)s
+  AND lower(address_line_1) LIKE lower(%(address_line_1)s)
+  AND lower(address_line_2) LIKE lower(%(address_line_2)s)
   AND lower(port_city) = lower(%(port_city)s)
-  AND substr(lower(address_line_1), 1, least(length(%(address_line_1)s), 9))
-      = substr(lower(%(address_line_1)s), 1, least(length(%(address_line_1)s), 9))
-  AND substr(lower(address_line_2), 1, least(length(%(address_line_2)s), 9))
-      = substr(lower(%(address_line_2)s), 1, least(length(%(address_line_2)s), 9))
+  AND date_of_birth = %(date_of_birth)s
+  AND lower(surname) != lower(%(surname)s)
 LIMIT 1
 """
 
@@ -59,10 +54,7 @@ WHERE lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
   AND lower(email_contact) = lower(%(email_contact)s)
   AND date_of_birth = %(date_of_birth)s
-  AND (
-        lower(maritime_account_id) = lower(%(maritime_account_id)s)
-        OR maritime_account_id IS NULL
-      )
+ORDER BY most_recent_sailing_date_1 DESC
 LIMIT 1
 """
 
@@ -70,14 +62,7 @@ LIMIT 1
 QUERY6 = """
 SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
 FROM customer_voyage_profile_v3
-WHERE lower(given_name) = lower(%(given_name)s)
-  AND lower(surname) = lower(%(surname)s)
-  AND lower(email_contact) = lower(%(email_contact)s)
-  AND date_of_birth = %(date_of_birth)s
-  AND (
-        lower(maritime_account_id) = lower(%(maritime_account_id)s)
-        OR maritime_account_id IS NULL
-      )
+WHERE contact_number = toString(%(contact_number)s)
 ORDER BY most_recent_sailing_date_1 DESC
 LIMIT 1
 """
@@ -88,12 +73,9 @@ SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
 FROM customer_voyage_profile_v3
 WHERE lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
-  AND date_of_birth = %(date_of_birth)s
+  AND lower(email_contact) = lower(%(email_contact)s)
   AND contact_number = toString(%(contact_number)s)
-  AND (
-        lower(maritime_account_id) = lower(%(maritime_account_id)s)
-        OR maritime_account_id IS NULL
-      )
+  AND date_of_birth = %(date_of_birth)s
 LIMIT 1
 """
 
@@ -101,14 +83,10 @@ LIMIT 1
 QUERY8 = """
 SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
 FROM customer_voyage_profile_v3
-WHERE lower(given_name) = lower(%(given_name)s)
-  AND lower(surname) = lower(%(surname)s)
-  AND date_of_birth = %(date_of_birth)s
-  AND contact_number = toString(%(contact_number)s)
-  AND (
-        lower(maritime_account_id) = lower(%(maritime_account_id)s)
-        OR maritime_account_id IS NULL
-      )
+WHERE lower(address_line_1) LIKE lower(%(address_line_1)s)
+  AND lower(address_line_2) LIKE lower(%(address_line_2)s)
+  AND lower(port_city) = lower(%(port_city)s)
+  AND substr(toString(zip_code), 1, 5) = substr(toString(%(zip_code)s), 1, 5)
 ORDER BY most_recent_sailing_date_1 DESC
 LIMIT 1
 """
@@ -117,18 +95,7 @@ LIMIT 1
 QUERY9 = """
 SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
 FROM customer_voyage_profile_v3
-WHERE lower(given_name) = lower(%(given_name)s)
-  AND lower(surname) = lower(%(surname)s)
-  AND date_of_birth = %(date_of_birth)s
-  AND lower(port_city) = lower(%(port_city)s)
-  AND substr(toString(zip_code), 1, 5)
-      = substr(toString(%(zip_code)s), 1, 5)
-  AND substr(lower(address_line_1), 1, least(length(%(address_line_1)s), 9))
-      = substr(lower(%(address_line_1)s), 1, least(length(%(address_line_1)s), 9))
-  AND (
-        lower(maritime_account_id) = lower(%(maritime_account_id)s)
-        OR maritime_account_id IS NULL
-      )
+WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
 LIMIT 1
 """
 
@@ -138,17 +105,9 @@ SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
 FROM customer_voyage_profile_v3
 WHERE lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
+  AND lower(email_contact) = lower(%(email_contact)s)
   AND date_of_birth = %(date_of_birth)s
-  AND lower(port_city) = lower(%(port_city)s)
-  AND substr(toString(zip_code), 1, 5)
-      = substr(toString(%(zip_code)s), 1, 5)
-  AND substr(lower(address_line_1), 1, least(length(%(address_line_1)s), 9))
-      = substr(lower(%(address_line_1)s), 1, least(length(%(address_line_1)s), 9))
-  AND (
-        lower(maritime_account_id) = lower(%(maritime_account_id)s)
-        OR maritime_account_id IS NULL
-      )
-ORDER BY most_recent_sailing_date_1 DESC
+ORDER BY membership_start_date_1 ASC
 LIMIT 1
 """
 
@@ -156,11 +115,8 @@ LIMIT 1
 QUERY11 = """
 SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
 FROM customer_voyage_profile_v3
-WHERE lower(given_name) = lower(%(given_name)s)
-  AND lower(surname) = lower(%(surname)s)
-  AND lower(email_contact) = lower(%(email_contact)s)
-  AND contact_number = toString(%(contact_number)s)
-  AND date_of_birth = %(date_of_birth)s
+WHERE contact_number = toString(%(contact_number)s)
+ORDER BY membership_start_date_1 ASC
 LIMIT 1
 """
 
@@ -168,45 +124,14 @@ LIMIT 1
 QUERY12 = """
 SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
 FROM customer_voyage_profile_v3
-WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
-  AND lower(given_name) = lower(%(given_name)s)
-  AND lower(surname) = lower(%(surname)s)
-  AND membership_start_date_1 = %(membership_start_date_1)s
-ORDER BY most_recent_sailing_date_1 DESC
+WHERE lower(address_line_1) LIKE lower(%(address_line_1)s)
+  AND lower(address_line_2) LIKE lower(%(address_line_2)s)
+  AND lower(port_city) = lower(%(port_city)s)
+  AND substr(toString(zip_code), 1, 5) = substr(toString(%(zip_code)s), 1, 5)
+ORDER BY membership_start_date_1 ASC
 LIMIT 1
 """
 
-QUERY12_TEMPLATE = """
-SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
-FROM customer_voyage_profile_v3
-WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
-  AND lower(given_name) = lower(%(given_name)s)
-  AND lower(surname) = lower(%(surname)s)
-  {membership_date_predicate}
-ORDER BY most_recent_sailing_date_1 DESC
-LIMIT 1
-"""
-
-
-def build_query12(params):
-    """
-    membership_start_date_1 is a Date32 column. ClickHouse correctly
-    rejects comparing it to an empty string, which is what we were
-    sending whenever the caller had no membership date to give us.
-
-    Per chdb's recommendation (option 1): when the value is missing,
-    omit the predicate entirely rather than forcing a '' -> Date32
-    conversion or defaulting it. A missing membership date means that
-    criterion just doesn't participate in the match.
-    """
-    membership_start_date_1 = params.get("membership_start_date_1")
-
-    if membership_start_date_1:
-        predicate = "AND membership_start_date_1 = %(membership_start_date_1)s"
-    else:
-        predicate = ""
-
-    return QUERY12_TEMPLATE.format(membership_date_predicate=predicate)
 
 QUERIES = {
     1: QUERY1,
@@ -220,31 +145,5 @@ QUERIES = {
     9: QUERY9,
     10: QUERY10,
     11: QUERY11,
-    12: build_query12,
+    12: QUERY12,
 }
-
-# QUERIES = {1: QUERY1, 2: QUERY2}
-
-# given_name,
-# surname,
-# date_of_birth,
-# maritime_account_id,
-# email_contact,
-# contact_number,
-# most_recent_sailing_date_1,
-# port_city,
-# address_line_1,
-# zip_code,
-# address_line_2,
-# membership_start_date_1,
-
-
-# customer_voyage_profile
-# │
-# ├── Main table
-# │   └── ORDER BY (customer_id, voyage_id)
-# │
-# └── prj_name_match
-# └── ORDER BY (customer_name, customer_id)
-
-# customer_voyage_profile_v2
