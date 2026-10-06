@@ -66,8 +66,8 @@ WHERE contact_number = toString(%(contact_number)s)
 ORDER BY most_recent_sailing_date_1 DESC
 LIMIT 1
 SETTINGS
-    max_execution_time = 10,
-    max_threads = 4,
+    max_execution_time = 1,
+    max_threads = 1,
     optimize_use_projections = 1,
     optimize_use_projection_filtering = 1,
     use_query_cache = 0,
@@ -108,8 +108,8 @@ WHERE lower(address_line_1) = lower(%(address_line_1)s)
 ORDER BY most_recent_sailing_date_1 DESC
 LIMIT 1
 SETTINGS
-    max_execution_time = 10,
-    max_threads = 4,
+    max_execution_time = 1,
+    max_threads = 1,
     optimize_use_projections = 1,
     optimize_use_projection_filtering = 1,
     use_query_cache = 0,
@@ -141,9 +141,9 @@ WHERE
     )
 LIMIT 1
 SETTINGS
-    max_execution_time = 10,
+    max_execution_time = 1,
     timeout_overflow_mode = 'throw',
-    max_threads = 4,
+    max_threads = 1,
     optimize_use_projections = 1,
     use_query_cache = 0,
     use_query_condition_cache = 0,
@@ -170,8 +170,8 @@ WHERE contact_number = toString(%(contact_number)s)
 ORDER BY membership_start_date_1 ASC
 LIMIT 1
 SETTINGS
-    max_execution_time = 10,
-    max_threads = 4,
+    max_execution_time = 1,
+    max_threads = 1,
     optimize_use_projections = 1,
     optimize_use_projection_filtering = 1,
     use_query_cache = 0,
@@ -200,8 +200,8 @@ WHERE lower(address_line_1) = lower(%(address_line_1)s)
 ORDER BY membership_start_date_1 ASC
 LIMIT 1
 SETTINGS
-    max_execution_time = 10,
-    max_threads = 4,
+    max_execution_time = 1,
+    max_threads = 1,
     optimize_use_projections = 1,
     optimize_use_projection_filtering = 1,
     use_query_cache = 0,
