@@ -201,14 +201,11 @@ ORDER BY membership_start_date_1 ASC
 LIMIT 1
 SETTINGS
     max_execution_time = 10,
-    timeout_overflow_mode = 'throw',
-    max_threads = 1,
+    max_threads = 4,
     optimize_use_projections = 1,
     optimize_use_projection_filtering = 1,
     use_query_cache = 0,
-    use_query_condition_cache = 0,
-    use_skip_indexes_on_data_read = 0,
-    use_skip_indexes = 0;
+    use_query_condition_cache = 0;
 """
 
 QUERIES = {
