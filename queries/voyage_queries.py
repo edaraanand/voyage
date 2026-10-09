@@ -1,6 +1,6 @@
 QUERY1 = """
 SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
-FROM customer_voyage_profile_v3
+FROM customer_voyage_profile_v3_shri
 WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
   AND lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
@@ -11,7 +11,7 @@ LIMIT 1
 
 QUERY2 = """
 SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
-FROM customer_voyage_profile_v3
+FROM customer_voyage_profile_v3_shri
 WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
   AND lower(given_name) = lower(%(given_name)s)
   AND lower(email_contact) = lower(%(email_contact)s)
@@ -23,7 +23,7 @@ LIMIT 1
 
 QUERY3 = """
 SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
-FROM customer_voyage_profile_v3
+FROM customer_voyage_profile_v3_shri
 WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
   AND lower(given_name) = lower(%(given_name)s)
   AND contact_number = toString(%(contact_number)s)
@@ -35,7 +35,7 @@ LIMIT 1
 
 QUERY4 = """
 SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
-FROM customer_voyage_profile_v3
+FROM customer_voyage_profile_v3_shri
 WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
   AND lower(given_name) = lower(%(given_name)s)
   AND lower(address_line_1) LIKE lower(%(address_line_1)s)
@@ -49,7 +49,7 @@ LIMIT 1
 
 QUERY5 = """
 SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
-FROM customer_voyage_profile_v3
+FROM customer_voyage_profile_v3_shri
 WHERE lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
   AND lower(email_contact) = lower(%(email_contact)s)
@@ -61,23 +61,16 @@ LIMIT 1
 
 QUERY6 = """
 SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
-FROM default.customer_voyage_profile_v3
+FROM customer_voyage_profile_v3_shri
 WHERE contact_number = toString(%(contact_number)s)
 ORDER BY most_recent_sailing_date_1 DESC
 LIMIT 1
-SETTINGS
-    max_execution_time = 1,
-    max_threads = 1,
-    optimize_use_projections = 1,
-    optimize_use_projection_filtering = 1,
-    use_query_cache = 0,
-    use_query_condition_cache = 0;
 """
 
 
 QUERY7 = """
 SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
-FROM customer_voyage_profile_v3
+FROM customer_voyage_profile_v3_shri
 WHERE lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
   AND lower(email_contact) = lower(%(email_contact)s)
@@ -87,73 +80,29 @@ LIMIT 1
 """
 
 
-# QUERY8 = """
-# SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
-# FROM customer_voyage_profile_v3
-# WHERE lower(address_line_1) LIKE lower(%(address_line_1)s)
-#   AND lower(address_line_2) LIKE lower(%(address_line_2)s)
-#   AND lower(port_city) = lower(%(port_city)s)
-#   AND substr(toString(zip_code), 1, 5) = substr(toString(%(zip_code)s), 1, 5)
-# ORDER BY most_recent_sailing_date_1 DESC
-# LIMIT 1
-# """
-
 QUERY8 = """
 SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
-FROM default.customer_voyage_profile_v3
+FROM customer_voyage_profile_v3_shri
 WHERE lower(address_line_1) = lower(%(address_line_1)s)
   AND lower(address_line_2) = lower(%(address_line_2)s)
   AND lower(port_city) = lower(%(port_city)s)
-  AND substring(zip_code, 1, 5) = substring(toString(%(zip_code)s), 1, 5)
+  AND substr(toString(zip_code), 1, 5) = substr(toString(%(zip_code)s), 1, 5)
 ORDER BY most_recent_sailing_date_1 DESC
 LIMIT 1
-SETTINGS
-    max_execution_time = 1,
-    max_threads = 1,
-    optimize_use_projections = 1,
-    optimize_use_projection_filtering = 1,
-    use_query_cache = 0,
-    use_query_condition_cache = 0;
 """
 
-# QUERY9 = """
-# SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
-# FROM customer_voyage_profile_v3
-# WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
-# LIMIT 1
-# """
 
 QUERY9 = """
 SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
-FROM default.customer_voyage_profile_v3
-WHERE
-    (date_of_birth, lower(surname), lower(given_name), maritime_account_id)
-    IN
-    (
-        SELECT
-            date_of_birth,
-            lower(surname),
-            lower(given_name),
-            maritime_account_id
-        FROM default.customer_voyage_profile_v3
-        WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
-        LIMIT 1
-    )
+FROM customer_voyage_profile_v3_shri
+WHERE lower(maritime_account_id) = lower(%(maritime_account_id)s)
 LIMIT 1
-SETTINGS
-    max_execution_time = 1,
-    timeout_overflow_mode = 'throw',
-    max_threads = 1,
-    optimize_use_projections = 1,
-    use_query_cache = 0,
-    use_query_condition_cache = 0,
-    use_skip_indexes_on_data_read = 0,
-    use_skip_indexes = 0;
 """
+
 
 QUERY10 = """
 SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
-FROM customer_voyage_profile_v3
+FROM customer_voyage_profile_v3_shri
 WHERE lower(given_name) = lower(%(given_name)s)
   AND lower(surname) = lower(%(surname)s)
   AND lower(email_contact) = lower(%(email_contact)s)
@@ -165,48 +114,24 @@ LIMIT 1
 
 QUERY11 = """
 SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
-FROM default.customer_voyage_profile_v3
+FROM customer_voyage_profile_v3_shri
 WHERE contact_number = toString(%(contact_number)s)
 ORDER BY membership_start_date_1 ASC
 LIMIT 1
-SETTINGS
-    max_execution_time = 1,
-    max_threads = 1,
-    optimize_use_projections = 1,
-    optimize_use_projection_filtering = 1,
-    use_query_cache = 0,
-    use_query_condition_cache = 0;
 """
 
-
-# QUERY12 = """
-# SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
-# FROM customer_voyage_profile_v3
-# WHERE lower(address_line_1) LIKE lower(%(address_line_1)s)
-#   AND lower(address_line_2) LIKE lower(%(address_line_2)s)
-#   AND lower(port_city) = lower(%(port_city)s)
-#   AND substr(toString(zip_code), 1, 5) = substr(toString(%(zip_code)s), 1, 5)
-# ORDER BY membership_start_date_1 ASC
-# LIMIT 1
-# """
 
 QUERY12 = """
 SELECT * EXCEPT(str_metrics, int_metrics, date_metrics)
-FROM default.customer_voyage_profile_v3
+FROM customer_voyage_profile_v3_shri
 WHERE lower(address_line_1) = lower(%(address_line_1)s)
   AND lower(address_line_2) = lower(%(address_line_2)s)
   AND lower(port_city) = lower(%(port_city)s)
-  AND substring(zip_code, 1, 5) = substr(toString(%(zip_code)s), 1, 5)
+  AND substr(toString(zip_code), 1, 5) = substr(toString(%(zip_code)s), 1, 5)
 ORDER BY membership_start_date_1 ASC
 LIMIT 1
-SETTINGS
-    max_execution_time = 1,
-    max_threads = 1,
-    optimize_use_projections = 1,
-    optimize_use_projection_filtering = 1,
-    use_query_cache = 0,
-    use_query_condition_cache = 0;
 """
+
 
 QUERIES = {
     1: QUERY1,
