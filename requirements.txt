@@ -23,3 +23,7 @@ opentelemetry-instrumentation-requests
 
 # Production server (optional)
 gunicorn
+
+pre-commit
+ruff
+bandit

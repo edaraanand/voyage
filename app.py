@@ -8,9 +8,7 @@ from observability import (
     logger,
     request_id_ctx,
 )
-
 from services.voyage_matcher import VoyageMatcher
-
 
 app = Flask(__name__)
 
@@ -23,9 +21,9 @@ matcher = VoyageMatcher()
 # REQUEST CONTEXT
 # ---------------------------------------------------------
 
+
 @app.before_request
 def add_request_context():
-
     request_id = request.headers.get(
         "X-Request-ID",
         str(uuid.uuid4()),
@@ -36,7 +34,6 @@ def add_request_context():
 
 @app.after_request
 def clear_request_context(response):
-
     token = getattr(
         g,
         "request_id_token",
@@ -53,9 +50,9 @@ def clear_request_context(response):
 # BAD REQUEST
 # ---------------------------------------------------------
 
+
 @app.errorhandler(400)
 def handle_bad_request(error):
-
     request_id = request_id_ctx.get()
 
     logger.warning(
@@ -88,9 +85,9 @@ def handle_bad_request(error):
 # HEALTH
 # ---------------------------------------------------------
 
+
 @app.get("/health")
 def health():
-
     logger.info(
         "health_check",
         extra={
@@ -110,15 +107,14 @@ def health():
 # VOYAGE MATCH
 # ---------------------------------------------------------
 
+
 @app.post("/voyage/match")
 def voyage_match():
-
     start = time.perf_counter()
 
     request_id = request_id_ctx.get()
 
     try:
-
         # -------------------------------------------------
         # Validate request body
         # -------------------------------------------------
@@ -126,10 +122,7 @@ def voyage_match():
         payload = request.get_json(silent=True)
 
         if payload is None:
-
-            total_ms = (
-                time.perf_counter() - start
-            ) * 1000
+            total_ms = (time.perf_counter() - start) * 1000
 
             logger.warning(
                 "request_completed request_id=%s",
@@ -164,9 +157,7 @@ def voyage_match():
 
         result = matcher.match(payload)
 
-        total_ms = (
-            time.perf_counter() - start
-        ) * 1000
+        total_ms = (time.perf_counter() - start) * 1000
 
         result["response_time_ms"] = round(
             total_ms,
@@ -198,17 +189,14 @@ def voyage_match():
         # -------------------------------------------------
 
         if timed_out:
-
             http_status = 504
             status_class = "5xx"
 
         elif not success:
-
             http_status = 500
             status_class = "5xx"
 
         else:
-
             http_status = 200
             status_class = "2xx"
 
@@ -243,10 +231,7 @@ def voyage_match():
         return jsonify(result), http_status
 
     except Exception:
-
-        total_ms = (
-            time.perf_counter() - start
-        ) * 1000
+        total_ms = (time.perf_counter() - start) * 1000
 
         logger.exception(
             "request_completed request_id=%s",
@@ -284,7 +269,6 @@ def voyage_match():
 # ---------------------------------------------------------
 
 if __name__ == "__main__":
-
     app.run(
         host="0.0.0.0",
         port=8080,
