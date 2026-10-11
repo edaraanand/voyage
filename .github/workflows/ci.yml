@@ -232,7 +232,7 @@ jobs:
     needs: [build-and-push, scan-image, sbom, sign-image]
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write   # GITHUB_TOKEN pushes the manifest bump to main
     # Serialize manifest bumps so two quick merges can't race each other
     concurrency:
       group: update-manifest
