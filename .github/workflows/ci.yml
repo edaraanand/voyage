@@ -43,7 +43,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           # Dev tools are installed here so they stay out of the runtime image
-          pip install ruff bandit pytest
+          # Keep ruff in sync with the rev in .pre-commit-config.yaml
+          pip install "ruff==0.14.10" bandit pytest
 
       - name: Lint with Ruff
         run: ruff check .
