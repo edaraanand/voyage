@@ -56,8 +56,8 @@ class VoyageMatcher:
     def __init__(self):
         self.clickhouse_config = {
             "host": "bdx31tl6ut.us-central1.gcp.clickhouse.cloud",
-            "username": "voyage_fid",
-            "password": "Clickhouse@2020h",
+            "username": os.environ["CLICKHOUSE_USERNAME"],
+            "password": os.environ["CLICKHOUSE_PASSWORD"],
             "database": "default",
             "secure": True,
         }
