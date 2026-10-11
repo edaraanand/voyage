@@ -1,15 +1,70 @@
 name: Voyage CI
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
 
+# Least privilege by default; jobs that need more ask for it explicitly.
+permissions:
+  contents: read
+
+# Cancel superseded PR runs; never cancel a run on main mid-deploy.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   IMAGE_NAME: docker.io/edaraanand/voyage
+  PYTHON_VERSION: "3.11"
 
 jobs:
-  # --- Supply Chain Security (CKS Domain: Supply Chain Security) ---
+  # ---------------------------------------------------------------------------
+  # Stage 1 — PR checklist (runs on PRs and on main)
+  # ---------------------------------------------------------------------------
+
+  python-quality:
+    name: Python lint, format, security & tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # Dev tools are installed here so they stay out of the runtime image
+          pip install ruff bandit pytest
+
+      - name: Lint with Ruff
+        run: ruff check .
+
+      - name: Check formatting with Ruff
+        run: ruff format --check .
+
+      - name: Security lint with Bandit
+        run: bandit -r . -x ./tests,./.venv,./venv -q
+
+      - name: Run tests
+        run: |
+          if [ -d tests ] && [ -n "$(find tests \( -name 'test_*.py' -o -name '*_test.py' \) -print -quit)" ]; then
+            pytest tests/ -v
+          else
+            echo "No test files found yet; checking that all Python files compile."
+            python -m compileall -q -x '(\.git|\.venv|venv|__pycache__)' .
+          fi
+
   dockerfile-lint:
+    name: Dockerfile lint (Hadolint)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -19,16 +74,16 @@ jobs:
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: Dockerfile
-          failure-threshold: warning   # fails on warning+ (bad practices, missing pins, etc.)
-          # failure-threshold: error   # fails on error (bad practices, missing pins, etc.)
+          failure-threshold: warning
 
   secret-scan:
+    name: Secret scan (Gitleaks)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # gitleaks needs full history to scan past commits too
+          fetch-depth: 0   # full history so past commits are scanned too
 
       - name: Scan for committed secrets
         uses: gitleaks/gitleaks-action@v2
@@ -36,6 +91,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   manifest-scan:
+    name: Kubernetes manifest scan (Checkov)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -46,35 +102,47 @@ jobs:
         with:
           directory: k8s/
           framework: kubernetes
-          soft_fail: true   # report-only for now — set to false once manifests are hardened
+          soft_fail: true   # report-only for now; set to false once manifests are hardened
 
-  test:
+  # PRs: build the image and scan it locally. Nothing is pushed to Docker Hub.
+  build-pr:
+    name: Build & scan image (PR, not pushed)
+    if: github.event_name == 'pull_request'
+    needs: [python-quality, dockerfile-lint, secret-scan, manifest-scan]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
         with:
-          python-version: "3.11"
+          context: .
+          push: false
+          load: true
+          tags: voyage:pr-${{ github.event.pull_request.number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Install dependencies
-        run: |
-          pip install --no-cache-dir -r requirements.txt
-          pip install --no-cache-dir pytest
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: voyage:pr-${{ github.event.pull_request.number }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"   # report-only for now; flip to "1" to enforce
 
-      - name: Run tests
-        run: |
-          if [ -d "tests" ]; then
-            pytest tests/ -v
-          else
-            echo "No tests/ directory found yet — verifying app.py parses cleanly."
-            python -c "import ast; ast.parse(open('app.py').read())"
-          fi
+  # ---------------------------------------------------------------------------
+  # Stage 2 — main only: build once, push, sign, SBOM, scan, deploy to dev
+  # ---------------------------------------------------------------------------
 
   build-and-push:
-    needs: [test, dockerfile-lint, secret-scan, manifest-scan]
+    name: Build & push image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [python-quality, dockerfile-lint, secret-scan, manifest-scan]
     runs-on: ubuntu-latest
     outputs:
       image-tag: ${{ steps.vars.outputs.sha_short }}
@@ -85,7 +153,7 @@ jobs:
 
       - name: Set short SHA
         id: vars
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+        run: echo "sha_short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -107,13 +175,14 @@ jobs:
           cache-to: type=gha,mode=max
 
   sbom:
+    name: Generate SBOM
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
       - name: Generate SBOM with Syft
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.image-tag }}
+          image: ${{ env.IMAGE_NAME }}@${{ needs.build-and-push.outputs.image-digest }}
           format: cyclonedx-json
           output-file: sbom.cyclonedx.json
 
@@ -125,10 +194,11 @@ jobs:
           retention-days: 90
 
   sign-image:
+    name: Sign image (cosign keyless)
     needs: build-and-push
     runs-on: ubuntu-latest
     permissions:
-      id-token: write   # required for keyless signing via GitHub OIDC
+      id-token: write   # GitHub OIDC for keyless signing
       contents: read
     steps:
       - name: Install cosign
@@ -140,38 +210,70 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Sign image (keyless)
-        run: |
-          cosign sign --yes ${{ env.IMAGE_NAME }}@${{ needs.build-and-push.outputs.image-digest }}
+      - name: Sign image by digest
+        run: cosign sign --yes "${IMAGE_NAME}@${{ needs.build-and-push.outputs.image-digest }}"
 
   scan-image:
+    name: Scan pushed image (Trivy)
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.image-tag }}
+          image-ref: ${{ env.IMAGE_NAME }}@${{ needs.build-and-push.outputs.image-digest }}
           severity: HIGH,CRITICAL
-          exit-code: "0"   # report-only for now — flip to "1" once you're ready to enforce it
+          ignore-unfixed: true
+          exit-code: "0"   # report-only for now; flip to "1" to enforce
 
   update-manifest:
+    name: Deploy to dev (bump manifest)
     needs: [build-and-push, scan-image, sbom, sign-image]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # Serialize manifest bumps so two quick merges can't race each other
+    concurrency:
+      group: update-manifest
+      cancel-in-progress: false
     steps:
-      - name: Checkout code
+      - name: Checkout main
         uses: actions/checkout@v4
         with:
+          ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Bump image tag in deployment.yaml
+      - name: Bump voyage image in deployment.yaml
+        env:
+          # tag for readability, digest so the cluster runs exactly the signed image
+          IMAGE: ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.image-tag }}@${{ needs.build-and-push.outputs.image-digest }}
         run: |
-          sed -i "s|image: .*|image: ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.image-tag }}|" k8s/deployment.yaml
+          # Only replace the voyage image line, not every "image:" in the file
+          sed -i -E "s#(image:[[:space:]]*)(docker\.io/)?edaraanand/voyage[^[:space:]]*#\1${IMAGE}#" k8s/deployment.yaml
+          if ! grep -qF "${IMAGE}" k8s/deployment.yaml; then
+            echo "::error::No edaraanand/voyage image line found in k8s/deployment.yaml"
+            exit 1
+          fi
 
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git add k8s/deployment.yaml
-          git commit -m "ci: update voyage image to ${{ needs.build-and-push.outputs.image-tag }}" || echo "No changes to commit"
-          git push
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit -m "ci: update voyage image to ${{ needs.build-and-push.outputs.image-tag }} [skip ci]"
+
+          # Retry with rebase in case main moved while the pipeline ran
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "Push attempt ${attempt} failed; retrying..."
+            sleep 5
+          done
+          exit 1

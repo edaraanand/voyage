@@ -71,15 +71,12 @@ class OtelContextFilter(logging.Filter):
 
 
 def configure_observability(app):
-
     #
     # Tracing
     #
     trace_provider = TracerProvider(resource=resource)
     trace_provider.add_span_processor(
-        BatchSpanProcessor(
-            OTLPSpanExporter(endpoint=f"{OTEL_COLLECTOR}/v1/traces")
-        )
+        BatchSpanProcessor(OTLPSpanExporter(endpoint=f"{OTEL_COLLECTOR}/v1/traces"))
     )
     trace.set_tracer_provider(trace_provider)
 

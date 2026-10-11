@@ -1,15 +1,16 @@
-import time
-import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import os
 import queue
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import clickhouse_connect
-from observability import logger, request_id_ctx, tracer
+import urllib3
 from opentelemetry import context
 from opentelemetry.trace import Status, StatusCode
+
+from observability import logger, request_id_ctx, tracer
 from queries.voyage_queries import QUERIES
-import os
-import urllib3
 
 # ---------------------------------------------------------------------------
 # Config -- pulled from env so this file and the Dockerfile can't drift out
@@ -42,11 +43,12 @@ MAX_CONCURRENT_REQUESTS = int(os.environ.get("MAX_CONCURRENT_REQUESTS", 2))
 
 N_QUERIES = len(QUERIES)
 
+
 def runtime_context():
     return {
         # NEW — unique per Docker replica
         "container_id": os.environ.get("HOSTNAME", "unknown"),
-        "worker_pid": os.getpid()
+        "worker_pid": os.getpid(),
     }
 
 
@@ -54,8 +56,8 @@ class VoyageMatcher:
     def __init__(self):
         self.clickhouse_config = {
             "host": "bdx31tl6ut.us-central1.gcp.clickhouse.cloud",
-            "username": "voyage_fid",
-            "password": "Clickhouse@2020h",
+            "username": os.environ["CLICKHOUSE_USERNAME"],
+            "password": os.environ["CLICKHOUSE_PASSWORD"],
             "database": "default",
             "secure": True,
         }
@@ -138,10 +140,7 @@ class VoyageMatcher:
         wait_ms = (time.perf_counter() - wait_start) * 1000
 
         try:
-            with tracer.start_as_current_span(
-                f"query-{query_id}"
-            ) as span:
-
+            with tracer.start_as_current_span(f"query-{query_id}") as span:
                 debug_query = self.substitute_query(
                     query,
                     params,
@@ -175,8 +174,9 @@ class VoyageMatcher:
                         parameters=params,
                         settings={
                             "query_id": ch_query_id,
-                            "log_comment":
-                                f"voyage|request={request_id}|query={query_id}",
+                            "log_comment": (
+                                f"voyage|request={request_id}|query={query_id}"
+                            ),
                             # This is the fix: previously commented out, so
                             # ClickHouse would let a query run indefinitely.
                             # Now ClickHouse itself enforces the cutoff and
@@ -189,10 +189,7 @@ class VoyageMatcher:
                     )
 
                 except Exception as ex:
-
-                    elapsed_ms = (
-                        time.perf_counter() - start_time
-                    ) * 1000
+                    elapsed_ms = (time.perf_counter() - start_time) * 1000
 
                     error_message = str(ex)
 
@@ -203,11 +200,8 @@ class VoyageMatcher:
                     )
 
                     if is_timeout:
-
                         span.set_attribute("voyage.query.timed_out", True)
-                        span.set_attribute(
-                            "voyage.query.duration_ms", elapsed_ms
-                        )
+                        span.set_attribute("voyage.query.duration_ms", elapsed_ms)
 
                         logger.warning(
                             "query_timeout "
@@ -338,9 +332,7 @@ class VoyageMatcher:
                 span.set_attribute("voyage.query.timed_out", False)
 
                 logger.info(
-                    "query_completed "
-                    "query_id=%s request_id=%s "
-                    "duration_ms=%.2f",
+                    "query_completed query_id=%s request_id=%s duration_ms=%.2f",
                     query_id,
                     request_id_ctx.get(),
                     elapsed_ms,
@@ -375,18 +367,12 @@ class VoyageMatcher:
         query,
         params,
     ):
-
         token = context.attach(parent_context)
 
         request_token = request_id_ctx.set(request_id)
 
         try:
-            return self.execute_query(
-                query_id,
-                query,
-                params,
-                request_id
-            )
+            return self.execute_query(query_id, query, params, request_id)
 
         finally:
             request_id_ctx.reset(request_token)
@@ -396,7 +382,6 @@ class VoyageMatcher:
         self,
         request,
     ):
-
         request_start = time.perf_counter()
 
         with tracer.start_as_current_span("voyage.match") as span:
@@ -433,13 +418,9 @@ class VoyageMatcher:
             # for pool clients they were never guaranteed to get.
             admission_wait_start = time.perf_counter()
             self._admission.acquire()
-            admission_wait_ms = (
-                time.perf_counter() - admission_wait_start
-            ) * 1000
+            admission_wait_ms = (time.perf_counter() - admission_wait_start) * 1000
 
-            span.set_attribute(
-                "voyage.request.admission_wait_ms", admission_wait_ms
-            )
+            span.set_attribute("voyage.request.admission_wait_ms", admission_wait_ms)
 
             if admission_wait_ms > 0:
                 logger.info(
@@ -495,19 +476,23 @@ class VoyageMatcher:
                             timed_out_queries.append(query_id)
 
                         elif not result["success"]:
-                            failed_queries.append({
-                                "query_id": query_id,
-                                "error": result.get("error"),
-                            })
+                            failed_queries.append(
+                                {
+                                    "query_id": query_id,
+                                    "error": result.get("error"),
+                                }
+                            )
 
                         elif result["rows"]:
                             matches.append(result)
 
                     except Exception as ex:
-                        failed_queries.append({
-                            "query_id": query_id,
-                            "error": str(ex),
-                        })
+                        failed_queries.append(
+                            {
+                                "query_id": query_id,
+                                "error": str(ex),
+                            }
+                        )
 
                         logger.exception(
                             "query_future_failed",
@@ -520,9 +505,7 @@ class VoyageMatcher:
 
                 db_wall_time_ms = (time.perf_counter() - db_start) * 1000
 
-                total_time_ms = (
-                    time.perf_counter() - request_start
-                ) * 1000
+                total_time_ms = (time.perf_counter() - request_start) * 1000
 
                 # ---------------------------------------------------------
                 # ANY QUERY TIMEOUT
@@ -531,7 +514,6 @@ class VoyageMatcher:
                 # This is the only timeout being handled here.
                 # ---------------------------------------------------------
                 if timed_out_queries:
-
                     return {
                         "success": False,
                         "matched": False,
@@ -550,7 +532,6 @@ class VoyageMatcher:
                 # ---------------------------------------------------------
 
                 if failed_queries:
-
                     return {
                         "success": False,
                         "matched": False,
@@ -567,7 +548,6 @@ class VoyageMatcher:
                 # ---------------------------------------------------------
 
                 if not matches:
-
                     span.set_attribute("voyage.match.success", False)
 
                     logger.info(
@@ -604,9 +584,7 @@ class VoyageMatcher:
 
                 best_match = min(matches, key=lambda x: x["query_id"])
 
-                span.set_attribute(
-                    "voyage.match.query_id", best_match["query_id"]
-                )
+                span.set_attribute("voyage.match.query_id", best_match["query_id"])
                 span.set_attribute("voyage.match.success", True)
 
                 logger.info(
