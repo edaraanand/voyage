@@ -199,22 +199,37 @@ jobs:
           exit-code: "0"   # report-only for now — flip to "1" once you're ready to enforce it
 
   update-manifest:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [build-and-push, scan-image, sbom, sign-image]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
-      - name: Checkout code
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
+          ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Bump image tag in deployment.yaml
+        env:
+          IMAGE: ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.image-tag }}
         run: |
-          sed -i "s|image: .*|image: ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.image-tag }}|" k8s/deployment.yaml
+          sed -i "s|image: .*|image: ${IMAGE}|" k8s/deployment.yaml
 
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git add k8s/deployment.yaml
-          git commit -m "ci: update voyage image to ${{ needs.build-and-push.outputs.image-tag }}" || echo "No changes to commit"
-          git push
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit -m "ci: update voyage image to ${{ needs.build-and-push.outputs.image-tag }} [skip ci]"
+          git push origin HEAD:main
