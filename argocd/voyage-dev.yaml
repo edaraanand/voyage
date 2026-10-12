@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: voyage-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/edaraanand/voyage
+    targetRevision: main
+    path: k8s/overlays/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: voyage
+  syncPolicy:
+    # Start with manual sync; enable automated after the first clean sync (step 5)
+    syncOptions:
+      - CreateNamespace=true
+      - PruneLast=true
