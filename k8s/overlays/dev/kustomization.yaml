@@ -6,10 +6,10 @@ resources:
 # CI writes dev; the Promote workflow copies this block into staging and prod.
 images:
   - name: docker.io/edaraanand/voyage
-    newTag: 1f8d0b1
+    newTag: 93ea853
     # digest: sha256:...   # filled in by CI / Promote
 
-    digest: sha256:8d0cc78bf6ed3d63632e1601156e7d217f20601266aa47b0ce2aebbf8815f416
+    digest: sha256:6b3dc7d4661b6644c47a4e2c0e9396e77ed35378b05b69e9250e4afd3bb28a8f
 replicas:
   - name: voyage-matcher # metadata.name of your Deployment
     count: 3
