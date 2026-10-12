@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Shared by every environment. No namespace here: each overlay sets its own.
+resources:
+  - deployment.yaml
+  - service.yaml
+  - configmap.yaml
+  - ingress.yaml
+  - namespace.yaml
+
+# Must match the image name written in base/deployment.yaml (without the tag).
+# Overlays override newTag/digest; this is only a fallback.
+images:
+  - name: docker.io/edaraanand/voyage
+    newTag: latest
