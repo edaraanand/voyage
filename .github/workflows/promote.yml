@@ -1,0 +1,50 @@
+name: Promote
+
+on:
+  workflow_dispatch:
+    inputs:
+      from:
+        description: Promote from
+        type: choice
+        options: [dev, staging]
+      to:
+        description: Promote to
+        type: choice
+        options: [staging, prod]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    env:
+      FROM: ${{ inputs.from }}
+      TO: ${{ inputs.to }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Only allow dev→staging or staging→prod
+        run: |
+          case "$FROM->$TO" in
+            dev->staging|staging->prod) ;;
+            *) echo "::error::Invalid promotion $FROM -> $TO"; exit 1 ;;
+          esac
+
+      - name: Copy image from source overlay to target overlay
+        id: copy
+        run: |
+          SRC="k8s/overlays/$FROM/kustomization.yaml"
+          DST="k8s/overlays/$TO/kustomization.yaml"
+          # yq is preinstalled on GitHub's Ubuntu runners
+          yq -i ".images = load(\"$SRC\").images" "$DST"
+          echo "tag=$(yq '.images[0].newTag' "$DST")" >> "$GITHUB_OUTPUT"
+
+      - name: Open promotion PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: promote/${{ inputs.to }}-${{ steps.copy.outputs.tag }}
+          commit-message: "promote: voyage ${{ steps.copy.outputs.tag }} ${{ inputs.from }} → ${{ inputs.to }}"
+          title: "Promote voyage ${{ steps.copy.outputs.tag }}: ${{ inputs.from }} → ${{ inputs.to }}"
+          body: Copies the exact image digest from `${{ inputs.from }}` to `${{ inputs.to }}`. No rebuild.

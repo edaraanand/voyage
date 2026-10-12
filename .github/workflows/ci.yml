@@ -244,24 +244,27 @@ jobs:
           ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Bump voyage image in deployment.yaml
+      - name: Bump voyage image in dev overlay
         env:
+          OVERLAY: k8s/overlays/dev/kustomization.yaml
           # tag for readability, digest so the cluster runs exactly the signed image
-          IMAGE: ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.image-tag }}@${{ needs.build-and-push.outputs.image-digest }}
+          TAG: ${{ needs.build-and-push.outputs.image-tag }}
+          DIGEST: ${{ needs.build-and-push.outputs.image-digest }}
         run: |
-          # Only replace the voyage image line, not every "image:" in the file
-          sed -i -E "s#(image:[[:space:]]*)(docker\.io/)?edaraanand/voyage[^[:space:]]*#\1${IMAGE}#" k8s/deployment.yaml
-          if ! grep -qF "${IMAGE}" k8s/deployment.yaml; then
-            echo "::error::No edaraanand/voyage image line found in k8s/deployment.yaml"
+          # yq is preinstalled on GitHub's Ubuntu runners
+          yq -i '(.images[] | select(.name == strenv(IMAGE_NAME))) |= (.newTag = strenv(TAG) | .digest = strenv(DIGEST))' "$OVERLAY"
+          if ! grep -qF "$DIGEST" "$OVERLAY"; then
+            echo "::error::No images entry named $IMAGE_NAME found in $OVERLAY"
             exit 1
           fi
+          cat "$OVERLAY"
 
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add k8s/deployment.yaml
+          git add k8s/overlays/dev/kustomization.yaml
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
