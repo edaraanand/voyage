@@ -16,6 +16,10 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: promote-${{ inputs.to }}
+  cancel-in-progress: false
+
 jobs:
   promote:
     runs-on: ubuntu-latest
@@ -24,12 +28,14 @@ jobs:
       TO: ${{ inputs.to }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Only allow dev→staging or staging→prod
         run: |
-          case "$FROM->$TO" in
-            dev->staging|staging->prod) ;;
-            *) echo "::error::Invalid promotion $FROM -> $TO"; exit 1 ;;
+          case "${FROM}:${TO}" in
+            "dev:staging"|"staging:prod") echo "Promoting ${FROM} -> ${TO}" ;;
+            *) echo "::error::Invalid promotion ${FROM} -> ${TO}. Allowed: dev -> staging, staging -> prod"; exit 1 ;;
           esac
 
       - name: Copy image from source overlay to target overlay
@@ -37,14 +43,44 @@ jobs:
         run: |
           SRC="k8s/overlays/$FROM/kustomization.yaml"
           DST="k8s/overlays/$TO/kustomization.yaml"
+
+          NEW_TAG=$(yq '.images[0].newTag // ""' "$SRC")
+          NEW_DIGEST=$(yq '.images[0].digest // ""' "$SRC")
+          OLD_TAG=$(yq '.images[0].newTag // ""' "$DST")
+          OLD_DIGEST=$(yq '.images[0].digest // ""' "$DST")
+
+          # Never promote an unpinned image (e.g. "latest" with no digest)
+          if [ -z "$NEW_DIGEST" ]; then
+            echo "::error::$SRC has no image digest. Merge to main so CI pins dev first."
+            exit 1
+          fi
+
           # yq is preinstalled on GitHub's Ubuntu runners
           yq -i ".images = load(\"$SRC\").images" "$DST"
-          echo "tag=$(yq '.images[0].newTag' "$DST")" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "tag=$NEW_TAG"
+            echo "digest=$NEW_DIGEST"
+            echo "old_tag=$OLD_TAG"
+            echo "old_digest=$OLD_DIGEST"
+          } >> "$GITHUB_OUTPUT"
+
+          git diff -- "$DST"
 
       - name: Open promotion PR
         uses: peter-evans/create-pull-request@v7
         with:
+          base: main
           branch: promote/${{ inputs.to }}-${{ steps.copy.outputs.tag }}
+          delete-branch: true
           commit-message: "promote: voyage ${{ steps.copy.outputs.tag }} ${{ inputs.from }} → ${{ inputs.to }}"
           title: "Promote voyage ${{ steps.copy.outputs.tag }}: ${{ inputs.from }} → ${{ inputs.to }}"
-          body: Copies the exact image digest from `${{ inputs.from }}` to `${{ inputs.to }}`. No rebuild.
+          body: |
+            Copies the exact image from `${{ inputs.from }}` to `${{ inputs.to }}`. No rebuild.
+
+            | | Tag | Digest |
+            |---|---|---|
+            | Before (`${{ inputs.to }}`) | `${{ steps.copy.outputs.old_tag }}` | `${{ steps.copy.outputs.old_digest }}` |
+            | After | `${{ steps.copy.outputs.tag }}` | `${{ steps.copy.outputs.digest }}` |
+
+            Merging this PR lets ArgoCD roll it out to `${{ inputs.to }}`. To roll back, revert this PR.
