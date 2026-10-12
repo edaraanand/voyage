@@ -1,20 +1,18 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: voyage-prod
-
 resources:
   - ../../base
-
 # CI writes dev; the Promote workflow copies this block into staging and prod.
 images:
   - name: docker.io/edaraanand/voyage
-    newTag: latest
+    newTag: 933351e
     # digest: sha256:...   # filled in by CI / Promote
 
+    digest: sha256:3d85dd66561446db3ca9bfff39b27b13966b2268529833fa75531273a1c3ee05
 replicas:
-  - name: voyage            # metadata.name of your Deployment
+  - name: voyage # metadata.name of your Deployment
     count: 3
-
 patches:
   # Per-env hostname. Assumes the Ingress is named "voyage" with one rule.
   - target:
@@ -24,12 +22,11 @@ patches:
       - op: replace
         path: /spec/rules/0/host
         value: voyage.example.com
-
-  # Per-env config values. Uncomment and adjust the name/keys to your ConfigMap.
-  # - target:
-  #     kind: ConfigMap
-  #     name: voyage-config
-  #   patch: |-
-  #     - op: replace
-  #       path: /data/LOG_LEVEL
-  #       value: debug
+# Per-env config values. Uncomment and adjust the name/keys to your ConfigMap.
+# - target:
+#     kind: ConfigMap
+#     name: voyage-config
+#   patch: |-
+#     - op: replace
+#       path: /data/LOG_LEVEL
+#       value: debug
