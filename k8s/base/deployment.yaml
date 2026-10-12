@@ -2,10 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: voyage-matcher
-  namespace: voyage
 
 spec:
-  replicas: 3
+  replicas: 3   # overlays set the real count per env
 
   selector:
     matchLabels:
@@ -26,8 +25,9 @@ spec:
       containers:
         - name: voyage-matcher
 
-          image: docker.io/edaraanand/voyage:5287a62@sha256:b46aadbaa84d9aefea9a016f7ec53c08f1447f6d50788323c106e6fa3b05558a
-          imagePullPolicy: Always
+          # Placeholder: each overlay's images: block sets the tag + digest
+          image: docker.io/edaraanand/voyage:latest
+          imagePullPolicy: IfNotPresent
 
           ports:
             - containerPort: 5000
@@ -53,7 +53,6 @@ spec:
             requests:
               cpu: "250m"
               memory: "512Mi"
-
             limits:
               cpu: "1"
               memory: "1Gi"
