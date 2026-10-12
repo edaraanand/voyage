@@ -11,7 +11,7 @@ images:
 
     digest: sha256:b21d3c0316226b9a3aca0fdb26c3ced46637b5b4cfa49dda039d5e83f3ca5914
 replicas:
-  - name: voyage # metadata.name of your Deployment
+  - name: voyage-matcher # metadata.name of your Deployment
     count: 3
 patches:
   # Per-env hostname. Assumes the Ingress is named "voyage" with one rule.
