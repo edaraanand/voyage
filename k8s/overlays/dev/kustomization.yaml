@@ -1,6 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: voyage-prod
+namespace: voyage
 resources:
   - ../../base
 # CI writes dev; the Promote workflow copies this block into staging and prod.
