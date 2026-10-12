@@ -11,7 +11,7 @@ spec:
     path: k8s/overlays/dev
   destination:
     server: https://kubernetes.default.svc
-    namespace: voyage
+    namespace: voyage-dev
   syncPolicy:
     # Start with manual sync; enable automated after the first clean sync (step 5)
     syncOptions:
